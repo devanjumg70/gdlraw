@@ -30,7 +30,7 @@ fn benchmark_pool_request_socket_limit_check(c: &mut Criterion) {
     // Let's just create 1000 tasks that access the pool concurrently to measure lock contention (if any).
     c.bench_function("pool_contention", |b| {
         b.to_async(&rt).iter(|| async {
-            let _ = black_box(pool.request_socket(&url).await);
+            let _ = black_box(pool.request_socket(&url, None).await);
         })
     });
 }

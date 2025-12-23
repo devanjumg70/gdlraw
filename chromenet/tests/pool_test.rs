@@ -23,13 +23,14 @@ async fn test_pool_limits() {
     // 2. Consume all 6 slots
     let mut sockets = Vec::new();
     for _ in 0..6 {
-        let socket = pool.request_socket(&url).await;
-        assert!(socket.is_ok(), "Failed to acquire socket within limit");
-        sockets.push(socket.unwrap());
+        let socket_res = pool.request_socket(&url, None).await;
+        assert!(socket_res.is_ok(), "Failed to acquire socket within limit");
+        let (socket, _reused) = socket_res.unwrap();
+        sockets.push(socket);
     }
 
     // 3. Request 7th - Should Fail
-    let result = pool.request_socket(&url).await;
+    let result = pool.request_socket(&url, None).await;
     assert!(result.is_err(), "Should fail when limit reached");
     assert_eq!(result.err(), Some(NetError::PreconnectMaxSocketLimit));
 
@@ -38,6 +39,6 @@ async fn test_pool_limits() {
     pool.release_socket(&url, socket);
 
     // 5. Request again - Should Succeed (Reuse)
-    let result = pool.request_socket(&url).await;
+    let result = pool.request_socket(&url, None).await;
     assert!(result.is_ok(), "Should succeed after release");
 }

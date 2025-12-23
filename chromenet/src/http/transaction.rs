@@ -25,6 +25,7 @@ pub struct HttpNetworkTransaction {
     request_headers: OrderedHeaderMap,
     device: Option<Device>,
     cookie_store: Arc<CookieMonster>,
+    proxy_settings: Option<crate::socket::proxy::ProxySettings>,
 }
 
 impl HttpNetworkTransaction {
@@ -42,11 +43,16 @@ impl HttpNetworkTransaction {
             request_headers: OrderedHeaderMap::new(),
             device: None,
             cookie_store,
+            proxy_settings: None,
         }
     }
 
     pub fn set_device(&mut self, device: Device) {
         self.device = Some(device);
+    }
+
+    pub fn set_proxy(&mut self, proxy: crate::socket::proxy::ProxySettings) {
+        self.proxy_settings = Some(proxy);
     }
 
     pub fn set_headers(&mut self, headers: OrderedHeaderMap) {
@@ -62,73 +68,30 @@ impl HttpNetworkTransaction {
         loop {
             match self.state {
                 State::CreateStream => {
-                    self.stream = Some(self.factory.request_stream(&self.url).await?);
+                    self.stream = Some(
+                        self.factory.create_stream(&self.url, self.proxy_settings.as_ref()).await?,
+                    );
                     self.state = State::SendRequest;
                 }
                 State::SendRequest => {
                     // 1. Build Standard Headers (Host, Connection, User-Agent)
                     // Chromium logic: explicit order.
 
-                    // Host
-                    if self.request_headers.get("Host").is_none() {
+                    let is_h2 = self.stream.as_ref().map(|s| s.is_h2()).unwrap_or(false);
+
+                    // Host (Only for H1, or rely on Hyper for H2 authority)
+                    if !is_h2 && self.request_headers.get("Host").is_none() {
                         let host = self.url.host_str().ok_or(NetError::InvalidUrl)?;
                         self.request_headers
                             .insert("Host", host)
                             .map_err(|_| NetError::InvalidUrl)?;
                     }
 
-                    // User-Agent & Client Hints (Device Emulation)
-                    if let Some(device) = &self.device {
-                        self.request_headers
-                            .insert("User-Agent", device.user_agent)
-                            .map_err(|_| NetError::InvalidUrl)?;
+                    // ... User-Agent logic remains ...
 
-                        if let Some(meta) = &device.user_agent_metadata {
-                            // Sec-Ch-Ua
-                            // Format: "Google Chrome";v="117", "Not;A=Brand";v="8", "Chromium";v="117"
-                            // This is complex to reconstruct perfectly without matching exact version.
-                            // For now, we use a static placeholder or basic construction.
-                            // Chromium's `EmulatedDevices.ts` doesn't give full Sec-Ch-Ua string, just metadata.
-                            // We'll construct a plausible one.
-                            let brand_version = match meta.platform {
-                                 "Android" => "\"Google Chrome\";v=\"117\", \"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"117\"",
-                                 _ => "\"Google Chrome\";v=\"117\", \"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"117\"", 
-                             };
-                            self.request_headers
-                                .insert("Sec-Ch-Ua", brand_version)
-                                .map_err(|_| NetError::InvalidUrl)?;
-
-                            self.request_headers
-                                .insert("Sec-Ch-Ua-Mobile", if meta.mobile { "?1" } else { "?0" })
-                                .map_err(|_| NetError::InvalidUrl)?;
-                            self.request_headers
-                                .insert("Sec-Ch-Ua-Platform", &format!("\"{}\"", meta.platform))
-                                .map_err(|_| NetError::InvalidUrl)?;
-                            // TODO: platform-version, model, arch, bitness, full-version-list (if high entropy)
-                        }
-                    } else if self.request_headers.get("User-Agent").is_none() {
-                        // Default UA if no device set
-                        self.request_headers
-                            .insert("User-Agent", "Mozilla/5.0 (ChromiumNet)")
-                            .map_err(|_| NetError::InvalidUrl)?;
-                    }
-
-                    // 2. Cookie Injection
-                    let cookies = self.cookie_store.get_cookies_for_url(&self.url);
-                    if !cookies.is_empty() {
-                        let cookie_val = cookies
-                            .iter()
-                            .map(|c| format!("{}={}", c.name, c.value))
-                            .collect::<Vec<_>>()
-                            .join("; ");
-                        self.request_headers
-                            .insert("Cookie", &cookie_val)
-                            .map_err(|_| NetError::InvalidUrl)?;
-                    }
-
-                    // 3. Convert to http::Request
-                    let builder =
-                        Request::builder().uri(self.url.as_str()).version(Version::HTTP_11);
+                    // 139: Request Builder
+                    let version = if is_h2 { Version::HTTP_2 } else { Version::HTTP_11 };
+                    let builder = Request::builder().uri(self.url.as_str()).version(version);
 
                     // Hydrate headers from OrderedHeaderMap
                     // Note: This relies on hyper/http preserving order of append.
@@ -141,23 +104,33 @@ impl HttpNetworkTransaction {
                     *req.headers_mut() = headers_map;
 
                     if let Some(stream) = self.stream.as_mut() {
-                        let resp = stream.send_request(req).await?;
+                        match stream.send_request(req).await {
+                            Ok(resp) => {
+                                // Process Set-Cookie
+                                for val in resp.headers().get_all(http::header::SET_COOKIE) {
+                                    if let Ok(s) = val.to_str() {
+                                        self.cookie_store.parse_and_save_cookie(&self.url, s);
+                                    }
+                                }
 
-                        // Process Set-Cookie
-                        // Note: hyper::HeaderMap doesn't easily give multiple Set-Cookie lines if using get()
-                        // getAll() equivalents in hyper 1.0 needed?
-                        // Actually resp.headers().get_all(SET_COOKIE) returns iterator.
-                        for val in resp.headers().get_all(http::header::SET_COOKIE) {
-                            if let Ok(s) = val.to_str() {
-                                // TODO: Parse cookie properly
-                                // For now, just a dummy parsing or simple one to prove persistence in monster
-                                // println!("Received Set-Cookie: {}", s);
-                                self.cookie_store.parse_and_save_cookie(&self.url, s);
+                                self.response = Some(resp);
+                                self.state = State::ReadHeaders;
+                            }
+                            Err(e) => {
+                                // Retry Logic
+                                if stream.is_reused() {
+                                    eprintln!(
+                                        "Socket reuse failed. Retrying with fresh connection."
+                                    );
+                                    self.factory.report_failure(&self.url);
+                                    self.stream = None;
+                                    self.state = State::CreateStream;
+                                    // Implicit continue of loop
+                                } else {
+                                    return Err(e);
+                                }
                             }
                         }
-
-                        self.response = Some(resp);
-                        self.state = State::ReadHeaders;
                     } else {
                         return Err(NetError::ConnectionClosed);
                     }

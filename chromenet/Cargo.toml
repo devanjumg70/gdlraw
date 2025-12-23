@@ -32,6 +32,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 time = { version = "0.3.44", features = ["serde", "parsing", "formatting"] }
 cookie = { version = "0.18.1", features = ["percent-encode"] }
+base64 = "0.22.1"
+h2 = "0.4.12"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
@@ -43,6 +45,10 @@ harness = false
 
 [[bench]]
 name = "pool"
+harness = false
+
+[[bench]]
+name = "h1_vs_h2"
 harness = false
 
 [[bench]]

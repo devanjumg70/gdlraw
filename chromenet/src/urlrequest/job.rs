@@ -15,6 +15,7 @@ pub struct URLRequestHttpJob {
     url: Url,
     cookie_store: Arc<CookieMonster>,
     device: Option<Device>,
+    proxy_settings: Option<crate::socket::proxy::ProxySettings>,
     redirect_limit: u8,
 }
 
@@ -34,6 +35,7 @@ impl URLRequestHttpJob {
             url,
             cookie_store,
             device: None,
+            proxy_settings: None,
             redirect_limit: 20, // Chromium default is 20
         }
     }
@@ -99,5 +101,10 @@ impl URLRequestHttpJob {
     pub fn set_device(&mut self, device: crate::urlrequest::device::Device) {
         self.device = Some(device.clone());
         self.transaction.set_device(device);
+    }
+
+    pub fn set_proxy(&mut self, proxy: crate::socket::proxy::ProxySettings) {
+        self.proxy_settings = Some(proxy.clone());
+        self.transaction.set_proxy(proxy);
     }
 }

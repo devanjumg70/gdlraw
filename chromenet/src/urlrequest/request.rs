@@ -40,4 +40,8 @@ impl URLRequest {
     pub fn set_device(&mut self, device: crate::urlrequest::device::Device) {
         self.job.set_device(device);
     }
+
+    pub fn set_proxy(&mut self, proxy: crate::socket::proxy::ProxySettings) {
+        self.job.set_proxy(proxy);
+    }
 }

@@ -8,23 +8,43 @@ use std::sync::Arc;
 use tokio::spawn;
 use url::Url;
 
+use crate::socket::client::SocketType;
+use hyper::client::conn::http2;
+
 /// Wraps the underlying protocol stream (H1/H2).
-/// Equivalent to net::HttpStream.
 pub struct HttpStream {
-    sender: http1::SendRequest<http_body_util::Empty<bytes::Bytes>>,
-    // We only support Sending Empty bodies for GET in this MVP for simplicity
-    // To support bodies, we need a generic body type
+    inner: HttpStreamInner,
+    is_reused: bool,
+}
+
+enum HttpStreamInner {
+    H1(http1::SendRequest<http_body_util::Empty<bytes::Bytes>>),
+    H2(http2::SendRequest<http_body_util::Empty<bytes::Bytes>>),
 }
 
 impl HttpStream {
+    pub fn is_h2(&self) -> bool {
+        matches!(self.inner, HttpStreamInner::H2(_))
+    }
+
+    pub fn is_reused(&self) -> bool {
+        self.is_reused
+    }
+
     pub async fn send_request(
         &mut self,
         req: Request<http_body_util::Empty<bytes::Bytes>>,
     ) -> Result<Response<Incoming>, NetError> {
-        self.sender.send_request(req).await.map_err(|e| {
-            eprintln!("Req error: {:?}", e);
-            NetError::ConnectionClosed
-        })
+        match &mut self.inner {
+            HttpStreamInner::H1(sender) => sender.send_request(req).await.map_err(|e| {
+                eprintln!("H1 Req error: {:?}", e);
+                NetError::ConnectionClosed
+            }),
+            HttpStreamInner::H2(sender) => sender.send_request(req).await.map_err(|e| {
+                eprintln!("H2 Req error: {:?}", e);
+                NetError::ConnectionClosed
+            }),
+        }
     }
 }
 
@@ -37,22 +57,83 @@ impl HttpStreamFactory {
         Self { pool }
     }
 
-    pub async fn request_stream(&self, url: &Url) -> Result<HttpStream, NetError> {
+    pub async fn create_stream(
+        &self,
+        url: &Url,
+        proxy: Option<&crate::socket::proxy::ProxySettings>,
+    ) -> Result<HttpStream, NetError> {
         // 1. Get raw socket
-        let socket = self.pool.request_socket(url).await?;
+        let (socket, is_reused) = self.pool.request_socket(url, proxy).await?;
 
-        // 2. Handshake (Only HTTP/1.1 for this MVP "Raw" step)
+        // Check negotiated protocol
+        let is_protocol_h2 = if let SocketType::Ssl(stream) = &socket {
+            matches!(stream.ssl().selected_alpn_protocol(), Some(b"h2"))
+        } else {
+            false
+        };
+
         let io = TokioIo::new(socket);
 
-        let (sender, conn) = http1::handshake(io).await.map_err(|_| NetError::ConnectionFailed)?;
+        if is_protocol_h2 {
+            // H2 Handshake
+            let (sender, conn) = http2::Builder::new(io::TokioExecutor::new())
+                .handshake::<_, http_body_util::Empty<bytes::Bytes>>(io)
+                .await
+                .map_err(|e| {
+                    eprintln!("H2 Handshake failed: {:?}", e);
+                    NetError::ConnectionFailed
+                })?;
 
-        // 3. Spawn the connection driver
-        spawn(async move {
-            if let Err(e) = conn.await {
-                eprintln!("Connection failed: {:?}", e);
-            }
-        });
+            spawn(async move {
+                if let Err(e) = conn.await {
+                    eprintln!("H2 Connection failed: {:?}", e);
+                }
+            });
 
-        Ok(HttpStream { sender })
+            Ok(HttpStream { inner: HttpStreamInner::H2(sender), is_reused })
+        } else {
+            // H1 Handshake (Default)
+            let (sender, conn) =
+                http1::handshake(io).await.map_err(|_| NetError::ConnectionFailed)?;
+
+            spawn(async move {
+                if let Err(e) = conn.await {
+                    eprintln!("H1 Connection failed: {:?}", e);
+                }
+            });
+
+            Ok(HttpStream { inner: HttpStreamInner::H1(sender), is_reused })
+        }
+    }
+
+    pub fn report_failure(&self, url: &Url) {
+        self.pool.discard_socket(url);
+    }
+}
+
+// Helper for H2 executor
+mod io {
+    use hyper::rt::Executor;
+    use std::future::Future;
+
+    #[derive(Clone)]
+    pub struct TokioExecutor {
+        _p: (),
+    }
+
+    impl TokioExecutor {
+        pub fn new() -> Self {
+            Self { _p: () }
+        }
+    }
+
+    impl<F> Executor<F> for TokioExecutor
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        fn execute(&self, fut: F) {
+            tokio::spawn(fut);
+        }
     }
 }

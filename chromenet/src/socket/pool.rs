@@ -55,7 +55,11 @@ impl ClientSocketPool {
         }
     }
 
-    pub async fn request_socket(&self, url: &Url) -> Result<SocketType, NetError> {
+    pub async fn request_socket(
+        &self,
+        url: &Url,
+        proxy: Option<&crate::socket::proxy::ProxySettings>,
+    ) -> Result<(SocketType, bool), NetError> {
         let group_id = GroupId::from_url(url).ok_or(NetError::InvalidUrl)?;
 
         // 1. Check Idle Sockets
@@ -64,7 +68,7 @@ impl ClientSocketPool {
                 if socket.is_connected() {
                     // Mark as active
                     self.active_per_group.entry(group_id.clone()).and_modify(|c| *c += 1);
-                    return Ok(socket);
+                    return Ok((socket, true));
                 }
                 // If disconnected/dead, verify if we should decrement total?
                 // Ideally yes, but our atomic counts "Active". Idle is dynamic.
@@ -98,8 +102,8 @@ impl ClientSocketPool {
         self.active_per_group.entry(group_id.clone()).and_modify(|c| *c += 1);
         self.total_active.fetch_add(1, Ordering::Relaxed);
 
-        match ConnectJob::connect(url).await {
-            Ok(socket) => Ok(socket),
+        match ConnectJob::connect(url, proxy).await {
+            Ok(socket) => Ok((socket, false)),
             Err(e) => {
                 // Decrement on failure
                 self.active_per_group.entry(group_id.clone()).and_modify(|c| *c -= 1);
@@ -130,6 +134,14 @@ impl ClientSocketPool {
             // If we return to idle, count is still occupied.
             // Let's stick to "Active" meaning "In Use by Transaction" for this simplified logic,
             // and Idle sockets are just free for taking.
+        }
+    }
+
+    /// Explicitly decrements counts when a socket is closed/destroyed without being returned to the pool.
+    pub fn discard_socket(&self, url: &Url) {
+        if let Some(group_id) = GroupId::from_url(url) {
+            self.active_per_group.entry(group_id).and_modify(|c| *c -= 1);
+            self.total_active.fetch_sub(1, Ordering::Relaxed);
         }
     }
 }

@@ -145,12 +145,14 @@ name = "chromenet"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "boring",
  "bytes",
  "cookie",
  "criterion",
  "dashmap",
  "foreign-types 0.3.2",
+ "h2",
  "http",
  "http-body-util",
  "hyper",

@@ -22,7 +22,7 @@ impl TlsConfig {
             max_version: None,
             // Chromium's default cipher list: "ALL:!aPSK:!ECDSA+SHA1:!3DES"
             cipher_list: "ALL:!aPSK:!ECDSA+SHA1:!3DES".to_string(),
-            alpn_protos: vec!["http/1.1".to_string()],
+            alpn_protos: vec!["h2".to_string(), "http/1.1".to_string()],
             enable_grease: true,
             enable_ocsp_stapling: true,
             enable_sct: true,
