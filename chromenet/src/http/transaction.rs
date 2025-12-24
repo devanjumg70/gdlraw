@@ -206,4 +206,10 @@ impl HttpNetworkTransaction {
     pub fn get_response(&mut self) -> Option<&Response<Incoming>> {
         self.response.as_ref()
     }
+
+    /// Take ownership of the response, converting to HttpResponse.
+    /// Can only be called once - subsequent calls return None.
+    pub fn take_response(&mut self) -> Option<crate::http::response::HttpResponse> {
+        self.response.take().map(crate::http::response::HttpResponse::from_hyper)
+    }
 }

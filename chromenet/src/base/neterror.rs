@@ -171,6 +171,14 @@ pub enum NetError {
     CookieInvalidPrefix,
     #[error("Cookie domain is a public suffix")]
     CookiePublicSuffix,
+    #[error("Invalid HTTP header")]
+    InvalidHeader,
+    #[error("HTTP body read error")]
+    HttpBodyError,
+    #[error("Invalid UTF-8 in body")]
+    InvalidUtf8,
+    #[error("JSON parse error")]
+    JsonParseError,
     #[error("Unsafe redirect")]
     UnsafeRedirect,
     #[error("Unsafe port")]
@@ -420,6 +428,10 @@ impl NetError {
             NetError::DataReceivedUnexpectedly => -902,
             NetError::CookieInvalidPrefix => -903,
             NetError::CookiePublicSuffix => -904,
+            NetError::InvalidHeader => -905,
+            NetError::HttpBodyError => -906,
+            NetError::InvalidUtf8 => -907,
+            NetError::JsonParseError => -908,
             NetError::Unknown(code) => *code,
         }
     }

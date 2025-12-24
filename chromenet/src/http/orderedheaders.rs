@@ -1,3 +1,4 @@
+use crate::base::neterror::NetError;
 use http::header::{HeaderName, HeaderValue};
 use http::HeaderMap;
 use std::str::FromStr;
@@ -14,13 +15,13 @@ impl OrderedHeaderMap {
         Self { headers: Vec::new() }
     }
 
-    pub fn insert(&mut self, name: &str, value: &str) -> anyhow::Result<()> {
-        let name_header = HeaderName::from_str(name)?; // Automatically lowercases
-        let value_header = HeaderValue::from_str(value)?;
+    pub fn insert(&mut self, name: &str, value: &str) -> Result<(), NetError> {
+        let name_header = HeaderName::from_str(name).map_err(|_| NetError::InvalidHeader)?;
+        let value_header = HeaderValue::from_str(value).map_err(|_| NetError::InvalidHeader)?;
 
         // Chromium behavior: Update in place if exists (case-insensitive key match), else append.
         // Since HeaderName is already lowercase, simple equality works.
-        if let Some((_, v)) = self.headers.iter_mut().find(|(n, _)| n == name_header) {
+        if let Some((_, v)) = self.headers.iter_mut().find(|(n, _)| *n == name_header) {
             *v = value_header;
         } else {
             self.headers.push((name_header, value_header));

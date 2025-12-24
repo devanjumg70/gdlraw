@@ -1,7 +1,8 @@
 use crate::base::neterror::NetError;
 use crate::http::streamfactory::HttpStreamFactory;
 use crate::http::transaction::HttpNetworkTransaction;
-use http::Response;
+use crate::http::RequestBody;
+use http::{Method, Response};
 use hyper::body::Incoming;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -10,10 +11,28 @@ use url::Url;
 use crate::cookies::monster::CookieMonster;
 use crate::urlrequest::device::Device;
 
+/// Compute the method to use after a redirect.
+/// Mirrors Chromium's ComputeMethodForRedirect in redirect_info.cc.
+/// Per RFC 7231:
+/// - 303 redirects convert all methods except HEAD to GET
+/// - 301/302 redirects convert POST to GET (historical behavior)
+/// - 307/308 preserve the original method
+fn compute_method_for_redirect(method: &Method, status_code: u16) -> Method {
+    if (status_code == 303 && method != Method::HEAD)
+        || ((status_code == 301 || status_code == 302) && method == Method::POST)
+    {
+        Method::GET
+    } else {
+        method.clone()
+    }
+}
+
 pub struct URLRequestHttpJob {
     transaction: HttpNetworkTransaction,
     factory: Arc<HttpStreamFactory>,
     url: Url,
+    method: Method,
+    body: RequestBody,
     cookie_store: Arc<CookieMonster>,
     device: Option<Device>,
     proxy_settings: Option<crate::socket::proxy::ProxySettings>,
@@ -39,6 +58,8 @@ impl URLRequestHttpJob {
             ),
             factory,
             url,
+            method: Method::GET,
+            body: RequestBody::default(),
             cookie_store,
             device: None,
             proxy_settings: None,
@@ -46,6 +67,16 @@ impl URLRequestHttpJob {
             visited_urls: visited,
             extra_headers: Vec::new(),
         }
+    }
+
+    /// Set the HTTP method.
+    pub fn set_method(&mut self, method: Method) {
+        self.method = method;
+    }
+
+    /// Set the request body.
+    pub fn set_body(&mut self, body: impl Into<RequestBody>) {
+        self.body = body.into();
     }
 
     pub async fn start(&mut self) -> Result<(), NetError> {
@@ -83,6 +114,19 @@ impl URLRequestHttpJob {
                 if self.redirect_limit == 0 {
                     return Err(NetError::TooManyRedirects);
                 }
+
+                // Get status code for method computation
+                let status_code =
+                    self.transaction.get_response().map(|r| r.status().as_u16()).unwrap_or(0);
+
+                // Compute new method per RFC 7231 (Chromium's ComputeMethodForRedirect)
+                let new_method = compute_method_for_redirect(&self.method, status_code);
+
+                // If method changed to GET, clear the body
+                if new_method != self.method && new_method == Method::GET {
+                    self.body = RequestBody::default();
+                }
+                self.method = new_method;
 
                 // Check for redirect cycle (exact URL match)
                 if !self.visited_urls.insert(new_url.to_string()) {
@@ -130,6 +174,11 @@ impl URLRequestHttpJob {
 
     pub fn get_response(&mut self) -> Option<&Response<Incoming>> {
         self.transaction.get_response()
+    }
+
+    /// Take ownership of the response with body.
+    pub fn take_response(&mut self) -> Option<crate::http::HttpResponse> {
+        self.transaction.take_response()
     }
 
     pub fn set_device(&mut self, device: crate::urlrequest::device::Device) {
