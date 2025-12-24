@@ -44,4 +44,8 @@ impl URLRequest {
     pub fn set_proxy(&mut self, proxy: crate::socket::proxy::ProxySettings) {
         self.job.set_proxy(proxy);
     }
+
+    pub fn add_header(&mut self, key: &str, value: &str) {
+        self.job.add_header(key, value);
+    }
 }

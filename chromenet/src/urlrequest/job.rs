@@ -17,6 +17,7 @@ pub struct URLRequestHttpJob {
     device: Option<Device>,
     proxy_settings: Option<crate::socket::proxy::ProxySettings>,
     redirect_limit: u8,
+    extra_headers: Vec<(String, String)>,
 }
 
 impl URLRequestHttpJob {
@@ -37,11 +38,17 @@ impl URLRequestHttpJob {
             device: None,
             proxy_settings: None,
             redirect_limit: 20, // Chromium default is 20
+            extra_headers: Vec::new(),
         }
     }
 
     pub async fn start(&mut self) -> Result<(), NetError> {
         loop {
+            // Apply Headers to current transaction
+            for (k, v) in &self.extra_headers {
+                self.transaction.add_header(k, v)?;
+            }
+
             // Start current transaction
             self.transaction.start().await?;
 
@@ -70,6 +77,16 @@ impl URLRequestHttpJob {
                 if self.redirect_limit == 0 {
                     return Err(NetError::TooManyRedirects);
                 }
+
+                // Check Cross-Origin for Auth Stripping
+                let is_cross_origin = self.url.scheme() != new_url.scheme()
+                    || self.url.host_str() != new_url.host_str()
+                    || self.url.port() != new_url.port();
+
+                if is_cross_origin {
+                    self.extra_headers.retain(|(k, _)| !k.eq_ignore_ascii_case("Authorization"));
+                }
+
                 self.redirect_limit -= 1;
                 self.url = new_url;
 
@@ -83,6 +100,11 @@ impl URLRequestHttpJob {
                 // Restore device if set
                 if let Some(device) = &self.device {
                     self.transaction.set_device(device.clone());
+                }
+
+                // Restore proxy if set
+                if let Some(proxy) = &self.proxy_settings {
+                    self.transaction.set_proxy(proxy.clone());
                 }
 
                 // CONTINUE LOOP
@@ -106,5 +128,11 @@ impl URLRequestHttpJob {
     pub fn set_proxy(&mut self, proxy: crate::socket::proxy::ProxySettings) {
         self.proxy_settings = Some(proxy.clone());
         self.transaction.set_proxy(proxy);
+    }
+
+    pub fn add_header(&mut self, key: &str, value: &str) {
+        self.extra_headers.push((key.to_string(), value.to_string()));
+        // Best-effort: ignore errors for already-added headers
+        let _ = self.transaction.add_header(key, value);
     }
 }

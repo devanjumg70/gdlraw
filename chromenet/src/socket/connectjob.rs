@@ -1,11 +1,19 @@
 use crate::base::neterror::NetError;
 use crate::socket::client::SocketType;
 use boring::ssl::{SslConnector, SslMethod};
+use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
 use tokio::net::TcpStream;
 use url::Url;
 
+/// Chromium's Happy Eyeballs IPv6 fallback delay (250ms).
+const IPV6_FALLBACK_DELAY: Duration = Duration::from_millis(250);
+
+/// Connection timeout (4 minutes, matches Chromium).
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(240);
+
 /// Manages the connection process: DNS -> TCP -> SSL.
-/// Roughly equivalent to net::ConnectJob.
+/// Implements Happy Eyeballs (RFC 8305) for faster dual-stack connections.
 pub struct ConnectJob {
     // Configuration
 }
@@ -19,108 +27,273 @@ impl ConnectJob {
             // If proxy, we connect to PROXY host/port first
             let phost = p.url.host_str().ok_or(NetError::InvalidUrl)?;
             let pport = p.url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
-            (phost, pport)
+            (phost.to_string(), pport)
         } else {
             // Direct connection
             let dhost = url.host_str().ok_or(NetError::InvalidUrl)?;
             let dport = url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
-            (dhost, dport)
+            (dhost.to_string(), dport)
         };
 
         // 1. DNS Resolution
         let addr_str = format!("{}:{}", host, port);
-        // Using tokio's resolve
-        let addrs =
-            tokio::net::lookup_host(&addr_str).await.map_err(|_| NetError::NameNotResolved)?;
+        let addrs: Vec<SocketAddr> = tokio::net::lookup_host(&addr_str)
+            .await
+            .map_err(|_| NetError::NameNotResolved)?
+            .collect();
 
-        // 2. TCP Connect (to proxy or destination)
-        let mut stream = None;
-        for addr in addrs {
-            if let Ok(s) = TcpStream::connect(addr).await {
-                stream = Some(s);
-                break;
-            }
+        if addrs.is_empty() {
+            return Err(NetError::NameNotResolved);
         }
 
-        let mut stream = stream.ok_or(NetError::ConnectionFailed)?;
+        // 2. TCP Connect with Happy Eyeballs
+        let mut stream = Self::connect_with_happy_eyeballs(&addrs).await?;
 
         // 2b. Proxy Handshake (HTTP CONNECT)
-        // If we are using a proxy, we need to tunnel to the final destination.
-        // We act as if we are connecting to the final host.
         if let Some(p) = proxy {
-            match p.proxy_type() {
-                crate::socket::proxy::ProxyType::Http => {
-                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-                    let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
-                    let target_port = url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
-                    let target = format!("{}:{}", target_host, target_port);
-
-                    let mut connect_req =
-                        format!("CONNECT {} HTTP/1.1\r\nHost: {}\r\n", target, target);
-
-                    if let Some(auth) = p.get_auth_header() {
-                        connect_req.push_str(&format!("Proxy-Authorization: {}\r\n", auth));
-                    }
-                    connect_req.push_str("\r\n");
-
-                    stream
-                        .write_all(connect_req.as_bytes())
-                        .await
-                        .map_err(|_| NetError::ConnectionFailed)?;
-
-                    // Read response
-                    // Naive reading of headers
-                    let mut buf = [0u8; 1024];
-                    let n = stream.read(&mut buf).await.map_err(|_| NetError::ConnectionFailed)?;
-                    let response = String::from_utf8_lossy(&buf[..n]);
-
-                    if !response.starts_with("HTTP/1.1 200")
-                        && !response.starts_with("HTTP/1.0 200")
-                    {
-                        eprintln!("Proxy Tunnel Failed: {}", response);
-                        return Err(NetError::ConnectionRefused); // Or ProxyError
-                    }
-
-                    // Tunnel established! `stream` is now a tunnel to target.
-                }
-                _ => {
-                    // TODO: Implement SOCKS5 or HTTPS proxy logic
-                    eprintln!("Unsupported proxy type");
-                    return Err(NetError::ConnectionFailed);
-                }
-            }
+            Self::proxy_handshake(&mut stream, url, p).await?;
         }
 
         let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
 
-        // 3. SSL Handshake (if https) - always happens *after* any tunnel is established
+        // 3. SSL Handshake (if https)
         if url.scheme() == "https" {
-            let mut builder =
-                SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
-
-            // Configure ALPN (H2 and H1)
-            // "\x02h2\x08http/1.1"
-            let protos = b"\x02h2\x08http/1.1";
-            builder.set_alpn_protos(protos).map_err(|_| NetError::SslProtocolError)?;
-
-            // Apply Chromium settings
-            use crate::socket::tls::TlsConfig;
-            let tls_config = TlsConfig::default_chrome();
-            tls_config.apply_to_builder(&mut builder)?;
-
-            let connector = builder.build();
-            let config = connector.configure().map_err(|_| NetError::SslProtocolError)?;
-
-            let tls_stream =
-                tokio_boring::connect(config, target_host, stream).await.map_err(|e| {
-                    eprintln!("SSL Handshake failed: {:?}", e);
-                    NetError::SslProtocolError
-                })?;
-
-            Ok(SocketType::Ssl(tls_stream))
+            Self::ssl_handshake(stream, target_host).await
         } else {
             Ok(SocketType::Tcp(stream))
         }
+    }
+
+    /// Connect using Happy Eyeballs (RFC 8305).
+    /// Starts IPv6 first, then races IPv4 after 250ms delay.
+    async fn connect_with_happy_eyeballs(addrs: &[SocketAddr]) -> Result<TcpStream, NetError> {
+        // Separate IPv4 and IPv6 addresses
+        let (ipv6_addrs, ipv4_addrs): (Vec<_>, Vec<_>) =
+            addrs.iter().partition(|a| matches!(a.ip(), IpAddr::V6(_)));
+
+        // If only one family, just try them all sequentially
+        if ipv6_addrs.is_empty() {
+            return Self::connect_any(&ipv4_addrs).await;
+        }
+        if ipv4_addrs.is_empty() {
+            return Self::connect_any(&ipv6_addrs).await;
+        }
+
+        // Happy Eyeballs: Start IPv6 first, then IPv4 after delay
+        tokio::select! {
+            // Try IPv6 first
+            result = Self::connect_any(&ipv6_addrs) => {
+                match result {
+                    Ok(stream) => Ok(stream),
+                    Err(_) => {
+                        // IPv6 failed, try IPv4
+                        Self::connect_any(&ipv4_addrs).await
+                    }
+                }
+            }
+            // Start IPv4 after delay
+            result = async {
+                tokio::time::sleep(IPV6_FALLBACK_DELAY).await;
+                Self::connect_any(&ipv4_addrs).await
+            } => {
+                result
+            }
+        }
+    }
+
+    /// Try connecting to any address in the list.
+    async fn connect_any(addrs: &[&SocketAddr]) -> Result<TcpStream, NetError> {
+        let mut last_error = NetError::ConnectionFailed;
+
+        for addr in addrs {
+            match tokio::time::timeout(CONNECTION_TIMEOUT, TcpStream::connect(addr)).await {
+                Ok(Ok(stream)) => return Ok(stream),
+                Ok(Err(_)) => last_error = NetError::ConnectionRefused,
+                Err(_) => last_error = NetError::ConnectionTimedOut,
+            }
+        }
+
+        Err(last_error)
+    }
+
+    /// Perform HTTP CONNECT proxy handshake.
+    async fn proxy_handshake(
+        stream: &mut TcpStream,
+        url: &Url,
+        proxy: &crate::socket::proxy::ProxySettings,
+    ) -> Result<(), NetError> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        match proxy.proxy_type() {
+            crate::socket::proxy::ProxyType::Http => {
+                let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
+                let target_port = url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
+                let target = format!("{}:{}", target_host, target_port);
+
+                let mut connect_req =
+                    format!("CONNECT {} HTTP/1.1\r\nHost: {}\r\n", target, target);
+
+                if let Some(auth) = proxy.get_auth_header() {
+                    connect_req.push_str(&format!("Proxy-Authorization: {}\r\n", auth));
+                }
+                connect_req.push_str("\r\n");
+
+                stream
+                    .write_all(connect_req.as_bytes())
+                    .await
+                    .map_err(|_| NetError::ConnectionFailed)?;
+
+                // Read response until we see \r\n\r\n
+                let mut response = Vec::with_capacity(1024);
+                let mut buf = [0u8; 256];
+
+                loop {
+                    let n = stream.read(&mut buf).await.map_err(|_| NetError::ConnectionFailed)?;
+                    if n == 0 {
+                        return Err(NetError::EmptyResponse);
+                    }
+                    response.extend_from_slice(&buf[..n]);
+
+                    // Check for header end
+                    if response.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+
+                    // Prevent unbounded growth
+                    if response.len() > 8192 {
+                        return Err(NetError::ResponseHeadersTooBig);
+                    }
+                }
+
+                let response_str = String::from_utf8_lossy(&response);
+                if !response_str.starts_with("HTTP/1.1 200")
+                    && !response_str.starts_with("HTTP/1.0 200")
+                {
+                    eprintln!("Proxy Tunnel Failed: {}", response_str);
+                    return Err(NetError::TunnelConnectionFailed);
+                }
+
+                Ok(())
+            }
+            crate::socket::proxy::ProxyType::Socks5 => Self::socks5_handshake(stream, url).await,
+            crate::socket::proxy::ProxyType::Https => {
+                // TODO: Implement HTTPS proxy (TLS to proxy first, then CONNECT)
+                Err(NetError::NoSupportedProxies)
+            }
+        }
+    }
+
+    /// Perform SOCKS5 proxy handshake (RFC 1928).
+    /// Based on Chromium's socks5_client_socket.cc pattern.
+    async fn socks5_handshake(stream: &mut TcpStream, url: &Url) -> Result<(), NetError> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        const SOCKS5_VERSION: u8 = 0x05;
+        const NO_AUTH: u8 = 0x00;
+        const CONNECT_CMD: u8 = 0x01;
+        const DOMAIN_ADDR: u8 = 0x03;
+
+        let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
+        let target_port = url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
+
+        // Validate hostname length (must fit in 1 byte)
+        if target_host.len() > 255 {
+            return Err(NetError::InvalidUrl);
+        }
+
+        // Phase 1: Greeting - tell proxy we want no auth
+        // [version, num_methods, method]
+        let greet = [SOCKS5_VERSION, 0x01, NO_AUTH];
+        stream.write_all(&greet).await.map_err(|_| NetError::ConnectionFailed)?;
+
+        // Read greeting response: [version, chosen_method]
+        let mut greet_response = [0u8; 2];
+        stream
+            .read_exact(&mut greet_response)
+            .await
+            .map_err(|_| NetError::SocksConnectionFailed)?;
+
+        if greet_response[0] != SOCKS5_VERSION {
+            eprintln!("SOCKS5: Invalid version {}", greet_response[0]);
+            return Err(NetError::SocksConnectionFailed);
+        }
+        if greet_response[1] != NO_AUTH {
+            eprintln!("SOCKS5: Unsupported auth method {}", greet_response[1]);
+            return Err(NetError::SocksConnectionFailed);
+        }
+
+        // Phase 2: Handshake - request connection to target
+        // [version, cmd, rsv, addr_type, addr..., port_hi, port_lo]
+        let mut handshake = Vec::with_capacity(7 + target_host.len());
+        handshake.push(SOCKS5_VERSION);
+        handshake.push(CONNECT_CMD);
+        handshake.push(0x00); // Reserved
+        handshake.push(DOMAIN_ADDR);
+        handshake.push(target_host.len() as u8);
+        handshake.extend_from_slice(target_host.as_bytes());
+        handshake.push((target_port >> 8) as u8);
+        handshake.push((target_port & 0xFF) as u8);
+
+        stream.write_all(&handshake).await.map_err(|_| NetError::ConnectionFailed)?;
+
+        // Read handshake response header: [version, status, rsv, addr_type, ...]
+        let mut response_header = [0u8; 5];
+        stream
+            .read_exact(&mut response_header)
+            .await
+            .map_err(|_| NetError::SocksConnectionFailed)?;
+
+        if response_header[0] != SOCKS5_VERSION {
+            return Err(NetError::SocksConnectionFailed);
+        }
+        if response_header[1] != 0x00 {
+            eprintln!("SOCKS5: Connection failed with status {}", response_header[1]);
+            return Err(NetError::SocksConnectionFailed);
+        }
+
+        // Read remaining address bytes based on address type
+        let addr_type = response_header[3];
+        let remaining_bytes = match addr_type {
+            0x01 => 4 + 2 - 1, // IPv4 (4 bytes) + port (2) - already read 1
+            0x03 => {
+                // Domain: first byte is length
+                let domain_len = response_header[4] as usize;
+                domain_len + 2 // domain + port
+            }
+            0x04 => 16 + 2 - 1, // IPv6 (16 bytes) + port (2) - already read 1
+            _ => return Err(NetError::SocksConnectionFailed),
+        };
+
+        // Drain remaining response bytes
+        let mut remaining = vec![0u8; remaining_bytes];
+        stream.read_exact(&mut remaining).await.map_err(|_| NetError::SocksConnectionFailed)?;
+
+        // Tunnel established!
+        Ok(())
+    }
+
+    /// Perform SSL/TLS handshake.
+    async fn ssl_handshake(stream: TcpStream, host: &str) -> Result<SocketType, NetError> {
+        let mut builder =
+            SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
+
+        // Configure ALPN (H2 and H1)
+        let protos = b"\x02h2\x08http/1.1";
+        builder.set_alpn_protos(protos).map_err(|_| NetError::SslProtocolError)?;
+
+        // Apply Chromium settings
+        use crate::socket::tls::TlsConfig;
+        let tls_config = TlsConfig::default_chrome();
+        tls_config.apply_to_builder(&mut builder)?;
+
+        let connector = builder.build();
+        let config = connector.configure().map_err(|_| NetError::SslProtocolError)?;
+
+        let tls_stream = tokio_boring::connect(config, host, stream).await.map_err(|e| {
+            eprintln!("SSL Handshake failed: {:?}", e);
+            NetError::SslProtocolError
+        })?;
+
+        Ok(SocketType::Ssl(tls_stream))
     }
 }

@@ -1,3 +1,4 @@
+use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
 use crate::http::orderedheaders::OrderedHeaderMap;
 use crate::http::streamfactory::{HttpStream, HttpStreamFactory};
@@ -6,15 +7,31 @@ use hyper::body::Incoming;
 use std::sync::Arc;
 use url::Url;
 
+use crate::cookies::monster::CookieMonster;
+use crate::urlrequest::device::Device;
+
+/// Internal state machine states.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
+    Idle,
     CreateStream,
     SendRequest,
     ReadHeaders,
     Done,
 }
 
-use crate::cookies::monster::CookieMonster;
-use crate::urlrequest::device::Device;
+impl State {
+    /// Map internal state to public LoadState.
+    fn to_load_state(self) -> LoadState {
+        match self {
+            State::Idle => LoadState::Idle,
+            State::CreateStream => LoadState::Connecting,
+            State::SendRequest => LoadState::SendingRequest,
+            State::ReadHeaders => LoadState::WaitingForResponse,
+            State::Done => LoadState::Idle,
+        }
+    }
+}
 
 pub struct HttpNetworkTransaction {
     factory: Arc<HttpStreamFactory>,
@@ -37,7 +54,7 @@ impl HttpNetworkTransaction {
         Self {
             factory,
             url,
-            state: State::CreateStream,
+            state: State::Idle,
             stream: None,
             response: None,
             request_headers: OrderedHeaderMap::new(),
@@ -45,6 +62,11 @@ impl HttpNetworkTransaction {
             cookie_store,
             proxy_settings: None,
         }
+    }
+
+    /// Get the current load state (for progress reporting).
+    pub fn get_load_state(&self) -> LoadState {
+        self.state.to_load_state()
     }
 
     pub fn set_device(&mut self, device: Device) {
@@ -59,6 +81,12 @@ impl HttpNetworkTransaction {
         self.request_headers = headers;
     }
 
+    /// Add a header to the request.
+    /// Returns an error if the header name or value is invalid.
+    pub fn add_header(&mut self, key: &str, value: &str) -> Result<(), NetError> {
+        self.request_headers.insert(key, value).map_err(|_| NetError::InvalidUrl)
+    }
+
     pub async fn start(&mut self) -> Result<(), NetError> {
         self.state = State::CreateStream;
         self.do_loop().await
@@ -67,6 +95,9 @@ impl HttpNetworkTransaction {
     async fn do_loop(&mut self) -> Result<(), NetError> {
         loop {
             match self.state {
+                State::Idle => {
+                    return Ok(());
+                }
                 State::CreateStream => {
                     self.stream = Some(
                         self.factory.create_stream(&self.url, self.proxy_settings.as_ref()).await?,
@@ -74,12 +105,9 @@ impl HttpNetworkTransaction {
                     self.state = State::SendRequest;
                 }
                 State::SendRequest => {
-                    // 1. Build Standard Headers (Host, Connection, User-Agent)
-                    // Chromium logic: explicit order.
-
                     let is_h2 = self.stream.as_ref().map(|s| s.is_h2()).unwrap_or(false);
 
-                    // Host (Only for H1, or rely on Hyper for H2 authority)
+                    // Host header (Only for H1)
                     if !is_h2 && self.request_headers.get("Host").is_none() {
                         let host = self.url.host_str().ok_or(NetError::InvalidUrl)?;
                         self.request_headers
@@ -87,14 +115,10 @@ impl HttpNetworkTransaction {
                             .map_err(|_| NetError::InvalidUrl)?;
                     }
 
-                    // ... User-Agent logic remains ...
-
-                    // 139: Request Builder
+                    // Build request
                     let version = if is_h2 { Version::HTTP_2 } else { Version::HTTP_11 };
                     let builder = Request::builder().uri(self.url.as_str()).version(version);
 
-                    // Hydrate headers from OrderedHeaderMap
-                    // Note: This relies on hyper/http preserving order of append.
                     let headers_map = self.request_headers.clone().to_header_map();
 
                     let mut req = builder
@@ -106,7 +130,7 @@ impl HttpNetworkTransaction {
                     if let Some(stream) = self.stream.as_mut() {
                         match stream.send_request(req).await {
                             Ok(resp) => {
-                                // Process Set-Cookie
+                                // Process Set-Cookie headers
                                 for val in resp.headers().get_all(http::header::SET_COOKIE) {
                                     if let Ok(s) = val.to_str() {
                                         self.cookie_store.parse_and_save_cookie(&self.url, s);
@@ -117,7 +141,7 @@ impl HttpNetworkTransaction {
                                 self.state = State::ReadHeaders;
                             }
                             Err(e) => {
-                                // Retry Logic
+                                // Retry on reused socket failure
                                 if stream.is_reused() {
                                     eprintln!(
                                         "Socket reuse failed. Retrying with fresh connection."
@@ -125,7 +149,6 @@ impl HttpNetworkTransaction {
                                     self.factory.report_failure(&self.url);
                                     self.stream = None;
                                     self.state = State::CreateStream;
-                                    // Implicit continue of loop
                                 } else {
                                     return Err(e);
                                 }
@@ -136,7 +159,6 @@ impl HttpNetworkTransaction {
                     }
                 }
                 State::ReadHeaders => {
-                    // Start() usually finishes when headers are available
                     self.state = State::Done;
                     return Ok(());
                 }
