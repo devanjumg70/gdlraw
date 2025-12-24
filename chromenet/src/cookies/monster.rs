@@ -49,8 +49,40 @@ impl CookieMonster {
         }
 
         entry.push(cookie);
+        drop(entry); // Release lock before checking global count
 
-        // TODO: Enforce global MAX_COOKIES_TOTAL limit
+        // Enforce global MAX_COOKIES_TOTAL limit
+        self.enforce_global_limit();
+    }
+
+    /// Enforce the global cookie limit by evicting oldest cookies.
+    fn enforce_global_limit(&self) {
+        while self.total_cookie_count() > MAX_COOKIES_TOTAL {
+            // Find and remove the oldest cookie across all domains
+            let mut oldest: Option<(String, usize, OffsetDateTime)> = None;
+
+            for entry in self.store.iter() {
+                let domain = entry.key().clone();
+                for (idx, cookie) in entry.value().iter().enumerate() {
+                    let dominated = oldest
+                        .as_ref()
+                        .is_some_and(|(_, _, oldest_time)| cookie.creation_time < *oldest_time);
+                    if oldest.is_none() || dominated {
+                        oldest = Some((domain.clone(), idx, cookie.creation_time));
+                    }
+                }
+            }
+
+            if let Some((domain, idx, _)) = oldest {
+                if let Some(mut entry) = self.store.get_mut(&domain) {
+                    if idx < entry.len() {
+                        entry.remove(idx);
+                    }
+                }
+            } else {
+                break;
+            }
+        }
     }
 
     /// Get cookies matching the URL with proper domain suffix matching.
@@ -223,5 +255,10 @@ impl CookieMonster {
     /// Clear all cookies.
     pub fn clear(&self) {
         self.store.clear();
+    }
+
+    /// Iterate over all cookies (for persistence).
+    pub fn iter_all_cookies(&self) -> impl Iterator<Item = CanonicalCookie> + '_ {
+        self.store.iter().flat_map(|entry| entry.value().clone())
     }
 }

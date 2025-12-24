@@ -38,6 +38,7 @@ h2 = "0.4.12"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 tokio = { version = "1.35", features = ["full", "test-util"] }
+tempfile = "3.10"
 
 [[bench]]
 name = "headers"

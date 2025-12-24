@@ -9,6 +9,60 @@ pub struct Device {
     pub capabilities: &'static [&'static str], // e.g., "touch", "mobile"
 }
 
+impl Device {
+    /// Get the User-Agent string, replacing %s with the Chrome version.
+    pub fn get_user_agent(&self, chrome_version: &str) -> String {
+        self.user_agent.replace("%s", chrome_version)
+    }
+
+    /// Generate Client Hints headers based on UserAgentMetadata.
+    /// Returns Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, etc.
+    pub fn get_client_hint_headers(&self, chrome_version: &str) -> Vec<(String, String)> {
+        let mut headers = Vec::new();
+
+        if let Some(ref meta) = self.user_agent_metadata {
+            // Sec-CH-UA: e.g., "Chromium";v="120", "Google Chrome";v="120"
+            let sec_ch_ua = format!(
+                "\"Chromium\";v=\"{0}\", \"Google Chrome\";v=\"{0}\", \"Not_A Brand\";v=\"24\"",
+                chrome_version.split('.').next().unwrap_or("120")
+            );
+            headers.push(("Sec-CH-UA".to_string(), sec_ch_ua));
+
+            // Sec-CH-UA-Mobile
+            let mobile = if meta.mobile { "?1" } else { "?0" };
+            headers.push(("Sec-CH-UA-Mobile".to_string(), mobile.to_string()));
+
+            // Sec-CH-UA-Platform
+            headers.push(("Sec-CH-UA-Platform".to_string(), format!("\"{}\"", meta.platform)));
+
+            // Sec-CH-UA-Platform-Version (if available)
+            if !meta.platform_version.is_empty() {
+                headers.push((
+                    "Sec-CH-UA-Platform-Version".to_string(),
+                    format!("\"{}\"", meta.platform_version),
+                ));
+            }
+
+            // Sec-CH-UA-Model (if available)
+            if !meta.model.is_empty() {
+                headers.push(("Sec-CH-UA-Model".to_string(), format!("\"{}\"", meta.model)));
+            }
+        }
+
+        headers
+    }
+
+    /// Check if this is a mobile device.
+    pub fn is_mobile(&self) -> bool {
+        self.capabilities.contains(&"mobile")
+    }
+
+    /// Check if this device has touch capability.
+    pub fn has_touch(&self) -> bool {
+        self.capabilities.contains(&"touch")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct UserAgentMetadata {
     pub platform: &'static str,

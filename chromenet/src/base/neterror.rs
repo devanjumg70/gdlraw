@@ -17,6 +17,8 @@ pub enum NetError {
     NameNotResolved,
     #[error("Internet disconnected")]
     InternetDisconnected,
+    #[error("Socket not connected")]
+    SocketNotConnected,
     #[error("SSL protocol error")]
     SslProtocolError,
     #[error("Address invalid")]
@@ -278,6 +280,7 @@ impl NetError {
             NetError::ConnectionFailed => -104,
             NetError::NameNotResolved => -105,
             NetError::InternetDisconnected => -106,
+            NetError::SocketNotConnected => -112,
             NetError::SslProtocolError => -107,
             NetError::AddressInvalid => -108,
             NetError::AddressUnreachable => -109,
@@ -416,6 +419,7 @@ impl From<i32> for NetError {
             -104 => NetError::ConnectionFailed,
             -105 => NetError::NameNotResolved,
             -106 => NetError::InternetDisconnected,
+            -112 => NetError::SocketNotConnected,
             -107 => NetError::SslProtocolError,
             -108 => NetError::AddressInvalid,
             -109 => NetError::AddressUnreachable,

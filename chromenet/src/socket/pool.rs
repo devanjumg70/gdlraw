@@ -10,20 +10,15 @@ use tokio::sync::oneshot;
 use url::Url;
 
 /// Request priority (matches Chromium's RequestPriority).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum RequestPriority {
     Throttled = 0,
     Idle = 1,
     Lowest = 2,
     Low = 3,
+    #[default]
     Medium = 4,
     Highest = 5,
-}
-
-impl Default for RequestPriority {
-    fn default() -> Self {
-        RequestPriority::Medium
-    }
 }
 
 /// Identifies a connection group (scheme, host, port).

@@ -1,6 +1,7 @@
 use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
 use crate::http::orderedheaders::OrderedHeaderMap;
+use crate::http::retry::{calculate_backoff, RetryConfig, RetryReason};
 use crate::http::streamfactory::{HttpStream, HttpStreamFactory};
 use http::{Request, Response, Version};
 use hyper::body::Incoming;
@@ -43,6 +44,8 @@ pub struct HttpNetworkTransaction {
     device: Option<Device>,
     cookie_store: Arc<CookieMonster>,
     proxy_settings: Option<crate::socket::proxy::ProxySettings>,
+    retry_config: RetryConfig,
+    retry_attempts: usize,
 }
 
 impl HttpNetworkTransaction {
@@ -61,7 +64,14 @@ impl HttpNetworkTransaction {
             device: None,
             cookie_store,
             proxy_settings: None,
+            retry_config: RetryConfig::default(),
+            retry_attempts: 0,
         }
+    }
+
+    /// Set custom retry configuration.
+    pub fn set_retry_config(&mut self, config: RetryConfig) {
+        self.retry_config = config;
     }
 
     /// Get the current load state (for progress reporting).
@@ -87,9 +97,35 @@ impl HttpNetworkTransaction {
         self.request_headers.insert(key, value).map_err(|_| NetError::InvalidUrl)
     }
 
+    /// Start the transaction with automatic retry on connection failures.
     pub async fn start(&mut self) -> Result<(), NetError> {
         self.state = State::CreateStream;
-        self.do_loop().await
+        self.retry_attempts = 0;
+
+        loop {
+            match self.do_loop().await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    // Check if this error is retryable
+                    if let Some(_reason) = RetryReason::from_error(&e) {
+                        if self.retry_attempts < self.retry_config.max_attempts {
+                            let delay = calculate_backoff(self.retry_attempts, &self.retry_config);
+                            self.retry_attempts += 1;
+
+                            // Reset state for retry
+                            self.state = State::CreateStream;
+                            self.stream = None;
+                            self.response = None;
+
+                            // Wait with exponential backoff
+                            tokio::time::sleep(delay).await;
+                            continue;
+                        }
+                    }
+                    return Err(e);
+                }
+            }
+        }
     }
 
     async fn do_loop(&mut self) -> Result<(), NetError> {
