@@ -1,9 +1,10 @@
 # HTTP Module
 
 ## Files
-- [transaction.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/http/transaction.rs) (158 lines)
-- [streamfactory.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/http/streamfactory.rs) (140 lines)
-- [orderedheaders.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/http/orderedheaders.rs) (58 lines)
+- [transaction.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/http/transaction.rs) (~210 lines)
+- [streamfactory.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/http/streamfactory.rs) (~140 lines)
+- [orderedheaders.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/http/orderedheaders.rs) (~60 lines)
+- [retry.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/http/retry.rs) (~155 lines)
 
 ---
 
@@ -22,11 +23,35 @@ stateDiagram-v2
 ```
 
 ### Features
+- **Automatic retry** with exponential backoff (max 3 attempts)
 - Auto-retry on reused socket failure
 - Cookie storage from `Set-Cookie` headers
 - H1/H2 protocol selection via ALPN
 
 ---
+
+## Retry Module
+
+Exponential backoff retry logic based on Chromium's `HttpNetworkTransaction`.
+
+### RetryReason (retryable errors)
+| Error | Description |
+|-------|-------------|
+| ConnectionReset | TCP RST received |
+| ConnectionClosed | TCP FIN received |
+| EmptyResponse | No data from server |
+| SocketNotConnected | Socket disconnected |
+| HttpRequestTimeout | Request timed out |
+
+### RetryConfig
+```rust
+RetryConfig {
+    max_attempts: 3,      // Chromium default
+    base_delay_ms: 100,   // 100ms initial backoff
+    max_delay_ms: 5000,   // Cap at 5 seconds
+    jitter_factor: 0.1,   // ±10% jitter
+}
+```
 
 ## HttpStreamFactory
 

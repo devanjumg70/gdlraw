@@ -63,7 +63,21 @@ store: Arc<DashMap<String, Vec<CanonicalCookie>>>  // Domain -> Cookies
 | `clear` | Remove all cookies |
 
 ### Limits
-| Limit | Value |
-|-------|-------|
-| Per-domain | 50 cookies |
-| Total | 3000 cookies (not yet enforced) |
+| Limit | Value | Status |
+|-------|-------|--------|
+| Per-domain | 50 cookies | ✅ Enforced |
+| Total | 3000 cookies | ✅ Enforced |
+
+---
+
+## Persistence Module
+
+Save and load cookies to/from JSON files.
+
+```rust
+// Save all cookies
+persistence::save_cookies(&monster, Path::new("cookies.json"))?;
+
+// Load cookies (filters expired)
+let monster = persistence::load_cookies(Path::new("cookies.json"))?;
+```

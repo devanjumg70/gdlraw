@@ -59,7 +59,7 @@ Handles DNS → TCP → (Proxy) → TLS pipeline with **Happy Eyeballs** and **S
 |------|--------|
 | HTTP CONNECT | ✅ Implemented |
 | SOCKS5 | ✅ Implemented (RFC 1928) |
-| HTTPS | ⏳ Not implemented |
+| HTTPS | ⏳ Foundation ready (StreamSocket) |
 
 ### Flow
 ```mermaid
@@ -96,6 +96,29 @@ pub struct TlsConfig {
 
 ---
 
+## StreamSocket Trait
+
+Enables TLS-in-TLS and polymorphic socket handling.
+
+```rust
+pub trait StreamSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static {}
+
+impl StreamSocket for TcpStream {}
+impl<S: StreamSocket> StreamSocket for SslStream<S> {}
+```
+
+### BoxedSocket
+
+Type-erased socket wrapper for dynamic dispatch:
+
+```rust
+pub struct BoxedSocket {
+    inner: Pin<Box<dyn StreamSocket>>,
+}
+```
+
+---
+
 ## SocketType
 
 Unified socket wrapper with **real health checks**.
@@ -105,9 +128,5 @@ pub enum SocketType {
     Tcp(tokio::net::TcpStream),
     Ssl(tokio_boring::SslStream<TcpStream>),
 }
-
-impl StreamSocket for SocketType {
-    fn is_connected(&self) -> bool;        // Uses try_read()
-    fn is_connected_and_idle(&self) -> bool;
-}
 ```
+
