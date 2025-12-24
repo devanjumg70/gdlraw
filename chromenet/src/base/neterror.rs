@@ -159,6 +159,18 @@ pub enum NetError {
     InvalidRedirect,
     #[error("Too many redirects")]
     TooManyRedirects,
+    #[error("Redirect cycle detected")]
+    RedirectCycleDetected,
+    #[error("Content-Length mismatch")]
+    ContentLengthMismatch,
+    #[error("Socket closed by remote")]
+    SocketRemoteClosed,
+    #[error("Data received unexpectedly on idle socket")]
+    DataReceivedUnexpectedly,
+    #[error("Cookie prefix validation failed")]
+    CookieInvalidPrefix,
+    #[error("Cookie domain is a public suffix")]
+    CookiePublicSuffix,
     #[error("Unsafe redirect")]
     UnsafeRedirect,
     #[error("Unsafe port")]
@@ -219,8 +231,6 @@ pub enum NetError {
     Http2ServerRefusedStream,
     #[error("HTTP/2 PING failed")]
     Http2PingFailed,
-    #[error("Content-Length mismatch")]
-    ContentLengthMismatch,
     #[error("Incomplete chunked encoding")]
     IncompleteChunkedEncoding,
     #[error("QUIC protocol error")]
@@ -404,6 +414,12 @@ impl NetError {
             NetError::Http2StreamClosed => -376,
             NetError::Http2ClientRefusedStream => -377,
             NetError::Http2PushedResponseDoesNotMatch => -378,
+            // Edge case errors (custom codes starting at -900)
+            NetError::RedirectCycleDetected => -900,
+            NetError::SocketRemoteClosed => -901,
+            NetError::DataReceivedUnexpectedly => -902,
+            NetError::CookieInvalidPrefix => -903,
+            NetError::CookiePublicSuffix => -904,
             NetError::Unknown(code) => *code,
         }
     }

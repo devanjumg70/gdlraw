@@ -66,4 +66,27 @@ impl CanonicalCookie {
             false // Session cookie? Or logic decided by store?
         }
     }
+
+    /// Validate __Secure- and __Host- cookie prefixes per RFC 6265bis.
+    /// - __Secure- cookies MUST have the Secure attribute
+    /// - __Host- cookies MUST have Secure, Path="/", and no Domain attribute
+    pub fn validate_prefix(
+        &self,
+        secure_origin: bool,
+    ) -> Result<(), crate::base::neterror::NetError> {
+        use crate::base::neterror::NetError;
+
+        if self.name.starts_with("__Secure-") && (!self.secure || !secure_origin) {
+            return Err(NetError::CookieInvalidPrefix);
+        }
+
+        if self.name.starts_with("__Host-") {
+            // __Host- requires: Secure flag, Path="/", host-only (no Domain), secure origin
+            if !self.secure || self.path != "/" || !self.host_only || !secure_origin {
+                return Err(NetError::CookieInvalidPrefix);
+            }
+        }
+
+        Ok(())
+    }
 }

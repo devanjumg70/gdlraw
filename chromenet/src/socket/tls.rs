@@ -103,4 +103,11 @@ impl TlsConfig {
 
         Ok(())
     }
+
+    /// Check if SNI (Server Name Indication) should be set for this host.
+    /// Per RFC 6066, SNI MUST NOT be set for raw IP addresses.
+    pub fn should_set_sni(host: &str) -> bool {
+        // If the host parses as an IP address, don't set SNI
+        host.parse::<std::net::IpAddr>().is_err()
+    }
 }

@@ -3,6 +3,7 @@ use crate::http::streamfactory::HttpStreamFactory;
 use crate::http::transaction::HttpNetworkTransaction;
 use http::Response;
 use hyper::body::Incoming;
+use std::collections::HashSet;
 use std::sync::Arc;
 use url::Url;
 
@@ -17,6 +18,7 @@ pub struct URLRequestHttpJob {
     device: Option<Device>,
     proxy_settings: Option<crate::socket::proxy::ProxySettings>,
     redirect_limit: u8,
+    visited_urls: HashSet<String>,
     extra_headers: Vec<(String, String)>,
 }
 
@@ -26,6 +28,9 @@ impl URLRequestHttpJob {
         url: Url,
         cookie_store: Arc<CookieMonster>,
     ) -> Self {
+        let mut visited = HashSet::new();
+        visited.insert(url.to_string());
+
         Self {
             transaction: HttpNetworkTransaction::new(
                 factory.clone(),
@@ -38,6 +43,7 @@ impl URLRequestHttpJob {
             device: None,
             proxy_settings: None,
             redirect_limit: 20, // Chromium default is 20
+            visited_urls: visited,
             extra_headers: Vec::new(),
         }
     }
@@ -73,18 +79,24 @@ impl URLRequestHttpJob {
                 None
             };
 
-            if let Some(new_url) = should_redirect {
+            if let Some(mut new_url) = should_redirect {
                 if self.redirect_limit == 0 {
                     return Err(NetError::TooManyRedirects);
                 }
 
+                // Check for redirect cycle (exact URL match)
+                if !self.visited_urls.insert(new_url.to_string()) {
+                    return Err(NetError::RedirectCycleDetected);
+                }
+
                 // Check Cross-Origin for Auth Stripping
-                let is_cross_origin = self.url.scheme() != new_url.scheme()
-                    || self.url.host_str() != new_url.host_str()
-                    || self.url.port() != new_url.port();
+                let is_cross_origin = self.url.origin() != new_url.origin();
 
                 if is_cross_origin {
                     self.extra_headers.retain(|(k, _)| !k.eq_ignore_ascii_case("Authorization"));
+                    // Strip credentials from URL (CVE-2014-1829 fix)
+                    let _ = new_url.set_username("");
+                    let _ = new_url.set_password(None);
                 }
 
                 self.redirect_limit -= 1;

@@ -103,3 +103,91 @@ impl StreamSocket for SocketType {
         self.is_connected()
     }
 }
+
+use crate::base::neterror::NetError;
+
+/// Wrapper around SocketType that tracks usage state for proper reuse detection.
+/// Follows Chromium's IdleSocket::IsUsable() pattern.
+#[derive(Debug)]
+pub struct WrappedSocket {
+    inner: SocketType,
+    was_used: bool,
+}
+
+impl WrappedSocket {
+    pub fn new(socket: SocketType) -> Self {
+        Self { inner: socket, was_used: false }
+    }
+
+    /// Mark the socket as having been used for a request.
+    pub fn mark_used(&mut self) {
+        self.was_used = true;
+    }
+
+    /// Check if the socket was ever used.
+    pub fn was_ever_used(&self) -> bool {
+        self.was_used
+    }
+
+    /// Check if the socket is usable for a new request.
+    /// Follows Chromium's IdleSocket::IsUsable() pattern:
+    /// - Previously-used sockets must be connected AND idle (no pending data)
+    /// - Never-used sockets only need to be connected
+    pub fn is_usable(&self) -> Result<(), NetError> {
+        if self.was_used {
+            if !self.inner.is_connected_and_idle() {
+                return if !self.inner.is_connected() {
+                    Err(NetError::SocketRemoteClosed)
+                } else {
+                    Err(NetError::DataReceivedUnexpectedly)
+                };
+            }
+        } else if !self.inner.is_connected() {
+            return Err(NetError::SocketRemoteClosed);
+        }
+        Ok(())
+    }
+
+    /// Get a reference to the inner socket.
+    pub fn inner(&self) -> &SocketType {
+        &self.inner
+    }
+
+    /// Get a mutable reference to the inner socket.
+    pub fn inner_mut(&mut self) -> &mut SocketType {
+        &mut self.inner
+    }
+
+    /// Consume and return the inner socket.
+    pub fn into_inner(self) -> SocketType {
+        self.inner
+    }
+}
+
+impl AsyncRead for WrappedSocket {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for WrappedSocket {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
