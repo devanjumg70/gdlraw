@@ -1,5 +1,5 @@
 use crate::base::neterror::NetError;
-use crate::socket::pool::ClientSocketPool;
+use crate::socket::pool::{ClientSocketPool, PoolResult};
 use http::{Request, Response};
 use hyper::body::Incoming;
 use hyper::client::conn::http1;
@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::spawn;
 use url::Url;
 
-use crate::socket::client::SocketType;
 use hyper::client::conn::http2;
 
 /// Wraps the underlying protocol stream (H1/H2).
@@ -62,19 +61,12 @@ impl HttpStreamFactory {
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
     ) -> Result<HttpStream, NetError> {
-        // 1. Get raw socket
-        let (socket, is_reused) = self.pool.request_socket(url, proxy).await?;
+        // 1. Get socket from pool
+        let pool_result: PoolResult = self.pool.request_socket(url, proxy).await?;
 
-        // Check negotiated protocol
-        let is_protocol_h2 = if let SocketType::Ssl(stream) = &socket {
-            matches!(stream.ssl().selected_alpn_protocol(), Some(b"h2"))
-        } else {
-            false
-        };
+        let io = TokioIo::new(pool_result.socket);
 
-        let io = TokioIo::new(socket);
-
-        if is_protocol_h2 {
+        if pool_result.is_h2 {
             // H2 Handshake
             let (sender, conn) = http2::Builder::new(io::TokioExecutor::new())
                 .handshake::<_, http_body_util::Empty<bytes::Bytes>>(io)
@@ -90,7 +82,7 @@ impl HttpStreamFactory {
                 }
             });
 
-            Ok(HttpStream { inner: HttpStreamInner::H2(sender), is_reused })
+            Ok(HttpStream { inner: HttpStreamInner::H2(sender), is_reused: pool_result.is_reused })
         } else {
             // H1 Handshake (Default)
             let (sender, conn) =
@@ -102,7 +94,7 @@ impl HttpStreamFactory {
                 }
             });
 
-            Ok(HttpStream { inner: HttpStreamInner::H1(sender), is_reused })
+            Ok(HttpStream { inner: HttpStreamInner::H1(sender), is_reused: pool_result.is_reused })
         }
     }
 

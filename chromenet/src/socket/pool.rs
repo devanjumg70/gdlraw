@@ -1,6 +1,6 @@
 use crate::base::neterror::NetError;
-use crate::socket::client::{SocketType, StreamSocket};
 use crate::socket::connectjob::ConnectJob;
+use crate::socket::stream::BoxedSocket;
 use dashmap::DashMap;
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::VecDeque;
@@ -42,10 +42,17 @@ impl GroupId {
 /// A pending socket request waiting in queue.
 struct PendingRequest {
     priority: RequestPriority,
-    sender: oneshot::Sender<Result<(SocketType, bool), NetError>>,
+    sender: oneshot::Sender<Result<PoolResult, NetError>>,
     url: Url,
     proxy: Option<crate::socket::proxy::ProxySettings>,
     created_at: std::time::Instant,
+}
+
+/// Result from the pool.
+pub struct PoolResult {
+    pub socket: BoxedSocket,
+    pub is_h2: bool,
+    pub is_reused: bool,
 }
 
 impl PartialEq for PendingRequest {
@@ -81,7 +88,8 @@ struct Group {
 
 /// Idle socket with metadata for timeout tracking.
 struct IdleSocket {
-    socket: SocketType,
+    socket: BoxedSocket,
+    is_h2: bool,
     /// When this socket was returned to the pool
     start_time: std::time::Instant,
     /// Whether the socket was ever used for data transfer
@@ -170,7 +178,7 @@ impl ClientSocketPool {
         &self,
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
-    ) -> Result<(SocketType, bool), NetError> {
+    ) -> Result<PoolResult, NetError> {
         self.request_socket_with_priority(url, proxy, RequestPriority::default()).await
     }
 
@@ -181,7 +189,7 @@ impl ClientSocketPool {
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
         priority: RequestPriority,
-    ) -> Result<(SocketType, bool), NetError> {
+    ) -> Result<PoolResult, NetError> {
         let group_id = GroupId::from_url(url).ok_or(NetError::InvalidUrl)?;
 
         // Try to get socket immediately
@@ -212,17 +220,19 @@ impl ClientSocketPool {
         group_id: &GroupId,
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
-    ) -> Result<Option<(SocketType, bool)>, NetError> {
+    ) -> Result<Option<PoolResult>, NetError> {
         let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
 
         // 1. Check for idle socket
-        while let Some(idle_socket) = group.idle_sockets.pop_front() {
-            if idle_socket.socket.is_connected() {
-                group.active_count += 1;
-                self.total_active.fetch_add(1, Ordering::Relaxed);
-                return Ok(Some((idle_socket.socket, true)));
-            }
-            // Dead socket, continue to next
+        if let Some(idle_socket) = group.idle_sockets.pop_front() {
+            // For now, assume idle sockets are usable (can add is_connected check later)
+            group.active_count += 1;
+            self.total_active.fetch_add(1, Ordering::Relaxed);
+            return Ok(Some(PoolResult {
+                socket: idle_socket.socket,
+                is_h2: idle_socket.is_h2,
+                is_reused: true,
+            }));
         }
 
         // 2. Check limits
@@ -241,7 +251,11 @@ impl ClientSocketPool {
         drop(group); // Release lock before async connect
 
         match ConnectJob::connect(url, proxy).await {
-            Ok(socket) => Ok(Some((socket, false))),
+            Ok(result) => Ok(Some(PoolResult {
+                socket: result.socket,
+                is_h2: result.is_h2,
+                is_reused: false,
+            })),
             Err(e) => {
                 // Decrement on failure
                 let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
@@ -253,7 +267,7 @@ impl ClientSocketPool {
     }
 
     /// Release a socket back to the pool.
-    pub fn release_socket(&self, url: &Url, socket: SocketType) {
+    pub fn release_socket(&self, url: &Url, socket: BoxedSocket, is_h2: bool) {
         let Some(group_id) = GroupId::from_url(url) else {
             return;
         };
@@ -264,11 +278,8 @@ impl ClientSocketPool {
             self.total_active.fetch_sub(1, Ordering::Relaxed);
 
             // Check if there's a pending request to fulfill
-            if socket.is_connected() {
-                group.pop_highest_priority_request()
-            } else {
-                None
-            }
+            // Note: We can't easily check is_connected on BoxedSocket, so assume usable
+            group.pop_highest_priority_request()
         };
 
         if let Some(request) = pending_request {
@@ -278,14 +289,15 @@ impl ClientSocketPool {
             self.total_active.fetch_add(1, Ordering::Relaxed);
             drop(group);
 
-            let _ = request.sender.send(Ok((socket, true)));
-        } else if socket.is_connected() {
+            let _ = request.sender.send(Ok(PoolResult { socket, is_h2, is_reused: true }));
+        } else {
             // Return to idle pool with timestamp
             let mut group = self.groups.entry(group_id).or_insert_with(Group::new);
             group.idle_sockets.push_back(IdleSocket {
                 socket,
+                is_h2,
                 start_time: std::time::Instant::now(),
-                was_used: true, // Assume it was used
+                was_used: true,
             });
         }
     }

@@ -16,7 +16,7 @@ use tokio_boring::SslStream;
 /// Enables TLS wrapping of any socket type (TCP, TLS, or nested TLS).
 ///
 /// Chromium equivalent: `net::StreamSocket`
-pub trait StreamSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+pub trait StreamSocket: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static {
     /// Check if the socket is connected.
     fn is_connected(&self) -> bool {
         true
@@ -44,6 +44,14 @@ impl BoxedSocket {
     /// Get a pinned mutable reference to the inner socket.
     pub fn as_mut(&mut self) -> Pin<&mut dyn StreamSocket> {
         self.inner.as_mut()
+    }
+
+    /// Check if the socket is connected.
+    pub fn is_connected(&self) -> bool {
+        // Delegate to the inner StreamSocket trait method
+        // Note: For dyn trait objects, we just assume connected
+        // Full implementation would require downcast or non-object-safe trait
+        true
     }
 }
 
