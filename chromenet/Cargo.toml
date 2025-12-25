@@ -63,3 +63,15 @@ harness = false
 [[bench]]
 name = "cookies_bench"
 harness = false
+
+[[bench]]
+name = "hsts_bench"
+harness = false
+
+[[bench]]
+name = "psl_bench"
+harness = false
+
+[[bench]]
+name = "pinning_bench"
+harness = false
