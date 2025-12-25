@@ -197,3 +197,66 @@ impl URLRequestHttpJob {
         let _ = self.transaction.add_header(key, value);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_301_post_becomes_get() {
+        let result = compute_method_for_redirect(&Method::POST, 301);
+        assert_eq!(result, Method::GET);
+    }
+
+    #[test]
+    fn test_302_post_becomes_get() {
+        let result = compute_method_for_redirect(&Method::POST, 302);
+        assert_eq!(result, Method::GET);
+    }
+
+    #[test]
+    fn test_303_any_becomes_get() {
+        assert_eq!(compute_method_for_redirect(&Method::POST, 303), Method::GET);
+        assert_eq!(compute_method_for_redirect(&Method::PUT, 303), Method::GET);
+        assert_eq!(compute_method_for_redirect(&Method::DELETE, 303), Method::GET);
+    }
+
+    #[test]
+    fn test_303_head_stays_head() {
+        let result = compute_method_for_redirect(&Method::HEAD, 303);
+        assert_eq!(result, Method::HEAD);
+    }
+
+    #[test]
+    fn test_307_preserves_method() {
+        assert_eq!(compute_method_for_redirect(&Method::POST, 307), Method::POST);
+        assert_eq!(compute_method_for_redirect(&Method::PUT, 307), Method::PUT);
+        assert_eq!(compute_method_for_redirect(&Method::DELETE, 307), Method::DELETE);
+    }
+
+    #[test]
+    fn test_308_preserves_method() {
+        assert_eq!(compute_method_for_redirect(&Method::POST, 308), Method::POST);
+        assert_eq!(compute_method_for_redirect(&Method::PUT, 308), Method::PUT);
+    }
+
+    #[test]
+    fn test_301_get_stays_get() {
+        let result = compute_method_for_redirect(&Method::GET, 301);
+        assert_eq!(result, Method::GET);
+    }
+
+    #[test]
+    fn test_301_put_stays_put() {
+        // PUT is not POST, so 301 preserves it
+        let result = compute_method_for_redirect(&Method::PUT, 301);
+        assert_eq!(result, Method::PUT);
+    }
+
+    #[test]
+    fn test_200_no_redirect() {
+        // Non-redirect status code
+        let result = compute_method_for_redirect(&Method::POST, 200);
+        assert_eq!(result, Method::POST);
+    }
+}

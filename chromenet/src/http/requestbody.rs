@@ -50,3 +50,59 @@ impl RequestBody {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_body() {
+        let body = RequestBody::Empty;
+        assert!(body.is_empty());
+        assert_eq!(body.len(), 0);
+    }
+
+    #[test]
+    fn test_bytes_body() {
+        let body = RequestBody::Bytes(Bytes::from("hello"));
+        assert!(!body.is_empty());
+        assert_eq!(body.len(), 5);
+    }
+
+    #[test]
+    fn test_from_string() {
+        let body: RequestBody = "hello world".to_string().into();
+        assert_eq!(body.len(), 11);
+    }
+
+    #[test]
+    fn test_from_str() {
+        let body: RequestBody = "test".into();
+        assert_eq!(body.len(), 4);
+    }
+
+    #[test]
+    fn test_from_vec() {
+        let body: RequestBody = vec![1u8, 2, 3, 4].into();
+        assert_eq!(body.len(), 4);
+    }
+
+    #[test]
+    fn test_from_bytes() {
+        let body: RequestBody = Bytes::from_static(b"raw").into();
+        assert_eq!(body.len(), 3);
+    }
+
+    #[test]
+    fn test_default_is_empty() {
+        let body = RequestBody::default();
+        assert!(body.is_empty());
+    }
+
+    #[test]
+    fn test_clone() {
+        let body1: RequestBody = "data".into();
+        let body2 = body1.clone();
+        assert_eq!(body1.len(), body2.len());
+    }
+}

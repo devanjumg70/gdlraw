@@ -60,6 +60,7 @@ impl HttpStreamFactory {
         &self,
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
+        h2_settings: Option<&crate::http::H2Settings>,
     ) -> Result<HttpStream, NetError> {
         // 1. Get socket from pool
         let pool_result: PoolResult = self.pool.request_socket(url, proxy).await?;
@@ -67,8 +68,15 @@ impl HttpStreamFactory {
         let io = TokioIo::new(pool_result.socket);
 
         if pool_result.is_h2 {
-            // H2 Handshake
+            // H2 Handshake with optional fingerprinting settings
+            let settings = h2_settings.copied().unwrap_or_default();
+
             let (sender, conn) = http2::Builder::new(io::TokioExecutor::new())
+                .initial_stream_window_size(settings.initial_window_size)
+                .initial_connection_window_size(settings.initial_window_size)
+                .max_frame_size(settings.max_frame_size)
+                .max_concurrent_streams(settings.max_concurrent_streams)
+                .max_header_list_size(settings.max_header_list_size)
                 .handshake::<_, http_body_util::Empty<bytes::Bytes>>(io)
                 .await
                 .map_err(|e| {

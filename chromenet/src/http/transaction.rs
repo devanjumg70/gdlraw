@@ -3,6 +3,7 @@ use crate::base::neterror::NetError;
 use crate::http::orderedheaders::OrderedHeaderMap;
 use crate::http::retry::{calculate_backoff, RetryConfig, RetryReason};
 use crate::http::streamfactory::{HttpStream, HttpStreamFactory};
+use crate::http::H2Settings;
 use http::{Request, Response, Version};
 use hyper::body::Incoming;
 use std::sync::Arc;
@@ -42,6 +43,7 @@ pub struct HttpNetworkTransaction {
     response: Option<Response<Incoming>>,
     request_headers: OrderedHeaderMap,
     device: Option<Device>,
+    h2_settings: Option<H2Settings>,
     cookie_store: Arc<CookieMonster>,
     proxy_settings: Option<crate::socket::proxy::ProxySettings>,
     retry_config: RetryConfig,
@@ -60,8 +62,9 @@ impl HttpNetworkTransaction {
             state: State::Idle,
             stream: None,
             response: None,
-            request_headers: OrderedHeaderMap::new(),
+            request_headers: OrderedHeaderMap::default(),
             device: None,
+            h2_settings: None,
             cookie_store,
             proxy_settings: None,
             retry_config: RetryConfig::default(),
@@ -85,6 +88,11 @@ impl HttpNetworkTransaction {
 
     pub fn set_proxy(&mut self, proxy: crate::socket::proxy::ProxySettings) {
         self.proxy_settings = Some(proxy);
+    }
+
+    /// Set HTTP/2 SETTINGS for fingerprinting.
+    pub fn set_h2_settings(&mut self, settings: H2Settings) {
+        self.h2_settings = Some(settings);
     }
 
     pub fn set_headers(&mut self, headers: OrderedHeaderMap) {
@@ -136,7 +144,13 @@ impl HttpNetworkTransaction {
                 }
                 State::CreateStream => {
                     self.stream = Some(
-                        self.factory.create_stream(&self.url, self.proxy_settings.as_ref()).await?,
+                        self.factory
+                            .create_stream(
+                                &self.url,
+                                self.proxy_settings.as_ref(),
+                                self.h2_settings.as_ref(),
+                            )
+                            .await?,
                     );
                     self.state = State::SendRequest;
                 }

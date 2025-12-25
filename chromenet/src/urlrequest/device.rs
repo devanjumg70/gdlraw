@@ -1,4 +1,4 @@
-// use crate::base::neterror::NetError;
+use crate::http::H2Settings;
 
 #[derive(Debug, Clone)]
 pub struct Device {
@@ -7,6 +7,7 @@ pub struct Device {
     pub user_agent_metadata: Option<UserAgentMetadata>,
     pub screen: Screen,
     pub capabilities: &'static [&'static str], // e.g., "touch", "mobile"
+    pub h2_settings: Option<H2Settings>,
 }
 
 impl Device {
@@ -113,6 +114,7 @@ impl DeviceRegistry {
                     vertical: Orientation { width: 390, height: 844 },
                 },
                 capabilities: &["touch", "mobile"],
+                h2_settings: None,
             },
             // Pixel 7
             Device {
@@ -134,6 +136,7 @@ impl DeviceRegistry {
                     vertical: Orientation { width: 412, height: 915 },
                 },
                 capabilities: &["touch", "mobile"],
+                h2_settings: None,
             },
             // Samsung Galaxy S8+
             Device {
@@ -154,6 +157,7 @@ impl DeviceRegistry {
                     vertical: Orientation { width: 360, height: 740 },
                 },
                 capabilities: &["touch", "mobile"],
+                h2_settings: None,
             },
         ]
     }
