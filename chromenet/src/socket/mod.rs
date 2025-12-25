@@ -1,3 +1,4 @@
+pub mod authcache;
 pub mod client;
 pub mod connectjob;
 pub mod pool;
