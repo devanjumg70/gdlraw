@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_derive_key_v10() {
-        // Test v10 key derivation (1 iteration)
+        // Test v10 key derivation (1 iteration) - same as Linux
         let key = derive_key(b"peanuts", 1);
         let expected: [u8; 16] = [
             0xfd, 0x62, 0x1f, 0xe5, 0xa2, 0xb4, 0x02, 0x53, 0x9d, 0xfa, 0x14, 0x7c, 0xa9, 0x27,
@@ -95,5 +95,35 @@ mod tests {
             0xd1, 0x7f,
         ];
         assert_eq!(key, expected);
+    }
+
+    #[test]
+    fn test_derive_key_macos_iterations() {
+        // macOS uses 1003 iterations - key should be different
+        let key_linux = derive_key(b"test_password", 1);
+        let key_macos = derive_key(b"test_password", 1003);
+        assert_ne!(key_linux, key_macos);
+    }
+
+    #[test]
+    fn test_derive_key_different_passwords() {
+        let key1 = derive_key(b"password1", 1);
+        let key2 = derive_key(b"password2", 1);
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_derive_key_unicode() {
+        // Unicode password should work
+        let key = derive_key("пароль".as_bytes(), 1);
+        assert_eq!(key.len(), 16);
+    }
+
+    #[test]
+    fn test_derive_key_long_password() {
+        // Long password should work
+        let long_password = "a".repeat(1000);
+        let key = derive_key(long_password.as_bytes(), 1);
+        assert_eq!(key.len(), 16);
     }
 }

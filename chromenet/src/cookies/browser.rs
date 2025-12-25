@@ -240,7 +240,7 @@ impl BrowserCookieReader {
             | Browser::Brave
             | Browser::Opera => self.read_chromium_cookies(&db_path),
             Browser::Firefox => self.read_firefox_cookies(&db_path),
-            Browser::Safari => Err(NetError::NotImplemented), // Binary format not yet supported
+            Browser::Safari => self.read_safari_cookies(&db_path),
         }
     }
 
@@ -261,10 +261,18 @@ impl BrowserCookieReader {
             | Browser::Brave
             | Browser::Opera => self.read_chromium_cookies_v2(&db_path),
             Browser::Firefox => self.read_firefox_cookies_v2(&db_path),
-            Browser::Safari => Err(CookieExtractionError::PlatformNotSupported(
-                "Safari binary cookies not yet implemented".into(),
-            )),
+            Browser::Safari => self.read_safari_cookies_v2(&db_path),
         }
+    }
+
+    fn read_safari_cookies(&self, path: &PathBuf) -> Result<Vec<CanonicalCookie>, NetError> {
+        let data = std::fs::read(path).map_err(|_| NetError::FileNotFound)?;
+        super::safari::parse_binary_cookies(&data).map_err(|_| NetError::InvalidResponse)
+    }
+
+    fn read_safari_cookies_v2(&self, path: &PathBuf) -> CookieResult<Vec<CanonicalCookie>> {
+        let data = std::fs::read(path)?;
+        super::safari::parse_binary_cookies(&data)
     }
 
     fn read_chromium_cookies(&self, path: &PathBuf) -> Result<Vec<CanonicalCookie>, NetError> {

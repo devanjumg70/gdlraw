@@ -6,3 +6,4 @@ pub mod monster;
 pub mod oscrypt;
 pub mod persistence;
 pub mod psl;
+pub mod safari;

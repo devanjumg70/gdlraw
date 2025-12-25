@@ -180,11 +180,20 @@ mod tests {
     }
 
     #[test]
+    fn test_empty_key_constant() {
+        // Verify our pre-computed empty key for fallback
+        assert_eq!(EMPTY_KEY.len(), 16);
+        assert_eq!(EMPTY_KEY[0], 0xd0);
+        assert_eq!(EMPTY_KEY[15], 0x7f);
+    }
+
+    #[test]
     fn test_is_encrypted() {
         assert!(is_encrypted(b"v10abc"));
         assert!(is_encrypted(b"v11xyz"));
         assert!(!is_encrypted(b"plain"));
         assert!(!is_encrypted(b""));
+        assert!(!is_encrypted(b"v1")); // Too short
     }
 
     #[test]
@@ -192,6 +201,7 @@ mod tests {
         assert_eq!(encryption_version(b"v10abc"), Some(10));
         assert_eq!(encryption_version(b"v11xyz"), Some(11));
         assert_eq!(encryption_version(b"plain"), None);
+        assert_eq!(encryption_version(b"v12test"), None); // Unknown version
     }
 
     #[test]
@@ -212,5 +222,69 @@ mod tests {
     fn test_decrypt_v11_not_implemented() {
         let result = decrypt(b"v11someciphertext");
         assert!(matches!(result, Err(NetError::NotImplemented)));
+    }
+
+    #[test]
+    fn test_decrypt_v10_empty_after_prefix() {
+        // v10 with no ciphertext should return empty string
+        let result = decrypt_v10(b"v10");
+        assert_eq!(result, Some(String::new()));
+    }
+
+    #[test]
+    fn test_decrypt_cookie_v10_error() {
+        // Invalid v10 ciphertext (wrong padding)
+        let result = decrypt_cookie(b"v10invalidciphertext");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_cookie_empty() {
+        let result = decrypt_cookie(b"");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_decrypt_cookie_plaintext() {
+        let result = decrypt_cookie(b"my_session_id=abc123");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "my_session_id=abc123");
+    }
+
+    #[test]
+    fn test_decrypt_aes_cbc_invalid_length() {
+        // Data not a multiple of 16
+        let result = decrypt_aes_cbc(&V10_KEY, &V10_IV, b"short");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_decrypt_aes_cbc_empty() {
+        let result = decrypt_aes_cbc(&V10_KEY, &V10_IV, b"");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_v10_with_key() {
+        // Test that decrypt_v10_with_key accepts valid prefix
+        let result = decrypt_v10_with_key(b"v10", &V10_KEY);
+        assert_eq!(result, Some(String::new()));
+
+        // Invalid prefix should return None
+        let result = decrypt_v10_with_key(b"xyz", &V10_KEY);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_chrome_salt_constant() {
+        assert_eq!(CHROME_SALT, b"saltysalt");
+    }
+
+    #[test]
+    fn test_v10_iv_constant() {
+        // IV should be 16 space characters
+        assert_eq!(V10_IV.len(), 16);
+        assert!(V10_IV.iter().all(|&b| b == 0x20));
     }
 }
