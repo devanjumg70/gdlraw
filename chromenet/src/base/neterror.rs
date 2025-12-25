@@ -179,6 +179,8 @@ pub enum NetError {
     InvalidUtf8,
     #[error("JSON parse error")]
     JsonParseError,
+    #[error("Certificate pinning validation failed")]
+    CertPinningFailed,
     #[error("Unsafe redirect")]
     UnsafeRedirect,
     #[error("Unsafe port")]
@@ -432,6 +434,7 @@ impl NetError {
             NetError::HttpBodyError => -906,
             NetError::InvalidUtf8 => -907,
             NetError::JsonParseError => -908,
+            NetError::CertPinningFailed => -909,
             NetError::Unknown(code) => *code,
         }
     }

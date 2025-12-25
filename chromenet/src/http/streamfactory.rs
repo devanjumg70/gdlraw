@@ -1,5 +1,6 @@
 use crate::base::neterror::NetError;
 use crate::socket::pool::{ClientSocketPool, PoolResult};
+use dashmap::DashMap;
 use http::{Request, Response};
 use hyper::body::Incoming;
 use hyper::client::conn::http1;
@@ -10,6 +11,9 @@ use url::Url;
 
 use hyper::client::conn::http2;
 
+/// Type alias for H2 sender
+type H2Sender = http2::SendRequest<http_body_util::Empty<bytes::Bytes>>;
+
 /// Wraps the underlying protocol stream (H1/H2).
 pub struct HttpStream {
     inner: HttpStreamInner,
@@ -18,7 +22,7 @@ pub struct HttpStream {
 
 enum HttpStreamInner {
     H1(http1::SendRequest<http_body_util::Empty<bytes::Bytes>>),
-    H2(http2::SendRequest<http_body_util::Empty<bytes::Bytes>>),
+    H2(H2Sender),
 }
 
 impl HttpStream {
@@ -47,13 +51,61 @@ impl HttpStream {
     }
 }
 
+/// HTTP/2 session cache for multiplexing.
+/// Stores active H2 senders by host:port key for reuse.
+struct H2SessionCache {
+    sessions: DashMap<String, H2Sender>,
+}
+
+impl H2SessionCache {
+    fn new() -> Self {
+        Self { sessions: DashMap::new() }
+    }
+
+    /// Get session key from URL
+    fn key(url: &Url) -> Option<String> {
+        Some(format!("{}:{}", url.host_str()?, url.port_or_known_default()?))
+    }
+
+    /// Get an existing H2 sender if available and ready
+    fn get(&self, url: &Url) -> Option<H2Sender> {
+        let key = Self::key(url)?;
+        let entry = self.sessions.get(&key)?;
+        let sender = entry.value();
+        // Check if sender is still usable
+        if sender.is_closed() {
+            drop(entry);
+            self.sessions.remove(&key);
+            None
+        } else {
+            Some(sender.clone())
+        }
+    }
+
+    /// Store an H2 sender for reuse
+    fn store(&self, url: &Url, sender: H2Sender) {
+        if let Some(key) = Self::key(url) {
+            self.sessions.insert(key, sender);
+        }
+    }
+
+    /// Remove a session (on connection error)
+    #[allow(dead_code)]
+    fn remove(&self, url: &Url) {
+        if let Some(key) = Self::key(url) {
+            self.sessions.remove(&key);
+        }
+    }
+}
+
 pub struct HttpStreamFactory {
     pool: Arc<ClientSocketPool>,
+    h2_cache: H2SessionCache,
 }
 
 impl HttpStreamFactory {
     pub fn new(pool: Arc<ClientSocketPool>) -> Self {
-        Self { pool }
+        Self { pool, h2_cache: H2SessionCache::new() }
     }
 
     pub async fn create_stream(
@@ -62,7 +114,15 @@ impl HttpStreamFactory {
         proxy: Option<&crate::socket::proxy::ProxySettings>,
         h2_settings: Option<&crate::http::H2Settings>,
     ) -> Result<HttpStream, NetError> {
-        // 1. Get socket from pool
+        // 1. Check H2 session cache for multiplexing (if HTTPS/H2)
+        if url.scheme() == "https" {
+            if let Some(sender) = self.h2_cache.get(url) {
+                // Reuse existing H2 connection (multiplexing!)
+                return Ok(HttpStream { inner: HttpStreamInner::H2(sender), is_reused: true });
+            }
+        }
+
+        // 2. Get socket from pool
         let pool_result: PoolResult = self.pool.request_socket(url, proxy).await?;
 
         let io = TokioIo::new(pool_result.socket);
@@ -83,6 +143,9 @@ impl HttpStreamFactory {
                     eprintln!("H2 Handshake failed: {:?}", e);
                     NetError::ConnectionFailed
                 })?;
+
+            // Store sender in cache for multiplexing
+            self.h2_cache.store(url, sender.clone());
 
             spawn(async move {
                 if let Err(e) = conn.await {
