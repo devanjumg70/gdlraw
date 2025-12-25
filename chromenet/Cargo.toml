@@ -32,6 +32,7 @@ time = { version = "0.3.44", features = ["serde", "parsing", "formatting"] }
 cookie = { version = "0.18.1", features = ["percent-encode"] }
 base64 = "0.22.1"
 h2 = "0.4.12"
+psl = "2"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }

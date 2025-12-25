@@ -205,8 +205,15 @@ impl CookieMonster {
             let (domain, host_only) = if let Some(d) = parsed.domain() {
                 // If explicit domain, it's not host-only.
                 // Chromium strips leading dot.
-                let d = d.trim_start_matches('.');
-                (d.to_lowercase(), false)
+                let d = d.trim_start_matches('.').to_lowercase();
+
+                // PSL validation: reject cookies set on public suffixes
+                // This prevents supercookie attacks (e.g., setting cookie on ".com")
+                if !crate::cookies::psl::is_valid_cookie_domain(&d, url.host_str().unwrap_or("")) {
+                    return; // Silently reject like browsers do
+                }
+
+                (d, false)
             } else {
                 // Host only
                 (url.host_str().unwrap_or("").to_lowercase(), true)
