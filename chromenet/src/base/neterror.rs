@@ -181,6 +181,10 @@ pub enum NetError {
     JsonParseError,
     #[error("Certificate pinning validation failed")]
     CertPinningFailed,
+    #[error("Feature not implemented")]
+    NotImplemented,
+    #[error("File not found")]
+    FileNotFound,
     #[error("Unsafe redirect")]
     UnsafeRedirect,
     #[error("Unsafe port")]
@@ -435,6 +439,8 @@ impl NetError {
             NetError::InvalidUtf8 => -907,
             NetError::JsonParseError => -908,
             NetError::CertPinningFailed => -909,
+            NetError::NotImplemented => -910,
+            NetError::FileNotFound => -911,
             NetError::Unknown(code) => *code,
         }
     }

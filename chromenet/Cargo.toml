@@ -33,6 +33,7 @@ cookie = { version = "0.18.1", features = ["percent-encode"] }
 base64 = "0.22.1"
 h2 = "0.4.12"
 psl = "2"
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
