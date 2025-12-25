@@ -79,7 +79,12 @@ impl URLRequestContext {
         // Start idle socket cleanup task
         socket_pool.start_cleanup_task();
 
-        Self { stream_factory, socket_pool, cookie_store, config }
+        Self {
+            stream_factory,
+            socket_pool,
+            cookie_store,
+            config,
+        }
     }
 
     /// Get the HTTP stream factory.

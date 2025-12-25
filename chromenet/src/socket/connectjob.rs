@@ -55,9 +55,15 @@ impl ConnectJob {
         // TLS if HTTPS
         if url.scheme() == "https" {
             let (tls, is_h2) = Self::ssl_handshake(tcp, host).await?;
-            Ok(ConnectResult { socket: BoxedSocket::new(tls), is_h2 })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(tls),
+                is_h2,
+            })
         } else {
-            Ok(ConnectResult { socket: BoxedSocket::new(tcp), is_h2: false })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(tcp),
+                is_h2: false,
+            })
         }
     }
 
@@ -67,7 +73,10 @@ impl ConnectJob {
         proxy: &crate::socket::proxy::ProxySettings,
     ) -> Result<ConnectResult, NetError> {
         let proxy_host = proxy.url.host_str().ok_or(NetError::InvalidUrl)?;
-        let proxy_port = proxy.url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
+        let proxy_port = proxy
+            .url
+            .port_or_known_default()
+            .ok_or(NetError::InvalidUrl)?;
 
         // Step 1: TCP to proxy
         let mut tcp = Self::connect_tcp(proxy_host, proxy_port).await?;
@@ -79,9 +88,15 @@ impl ConnectJob {
         if url.scheme() == "https" {
             let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
             let (tls, is_h2) = Self::ssl_handshake(tcp, target_host).await?;
-            Ok(ConnectResult { socket: BoxedSocket::new(tls), is_h2 })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(tls),
+                is_h2,
+            })
         } else {
-            Ok(ConnectResult { socket: BoxedSocket::new(tcp), is_h2: false })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(tcp),
+                is_h2: false,
+            })
         }
     }
 
@@ -92,7 +107,10 @@ impl ConnectJob {
         proxy: &crate::socket::proxy::ProxySettings,
     ) -> Result<ConnectResult, NetError> {
         let proxy_host = proxy.url.host_str().ok_or(NetError::InvalidUrl)?;
-        let proxy_port = proxy.url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
+        let proxy_port = proxy
+            .url
+            .port_or_known_default()
+            .ok_or(NetError::InvalidUrl)?;
 
         // Step 1: TCP to proxy
         let tcp = Self::connect_tcp(proxy_host, proxy_port).await?;
@@ -107,9 +125,15 @@ impl ConnectJob {
         if url.scheme() == "https" {
             let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
             let (target_tls, is_h2) = Self::ssl_handshake_generic(proxy_tls, target_host).await?;
-            Ok(ConnectResult { socket: BoxedSocket::new(target_tls), is_h2 })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(target_tls),
+                is_h2,
+            })
         } else {
-            Ok(ConnectResult { socket: BoxedSocket::new(proxy_tls), is_h2: false })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(proxy_tls),
+                is_h2: false,
+            })
         }
     }
 
@@ -119,7 +143,10 @@ impl ConnectJob {
         proxy: &crate::socket::proxy::ProxySettings,
     ) -> Result<ConnectResult, NetError> {
         let proxy_host = proxy.url.host_str().ok_or(NetError::InvalidUrl)?;
-        let proxy_port = proxy.url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
+        let proxy_port = proxy
+            .url
+            .port_or_known_default()
+            .ok_or(NetError::InvalidUrl)?;
 
         // Step 1: TCP to proxy
         let mut tcp = Self::connect_tcp(proxy_host, proxy_port).await?;
@@ -131,9 +158,15 @@ impl ConnectJob {
         if url.scheme() == "https" {
             let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
             let (tls, is_h2) = Self::ssl_handshake(tcp, target_host).await?;
-            Ok(ConnectResult { socket: BoxedSocket::new(tls), is_h2 })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(tls),
+                is_h2,
+            })
         } else {
-            Ok(ConnectResult { socket: BoxedSocket::new(tcp), is_h2: false })
+            Ok(ConnectResult {
+                socket: BoxedSocket::new(tcp),
+                is_h2: false,
+            })
         }
     }
 
@@ -202,19 +235,25 @@ impl ConnectJob {
 
         // ALPN for H2 and H1
         let protos = b"\x02h2\x08http/1.1";
-        builder.set_alpn_protos(protos).map_err(|_| NetError::SslProtocolError)?;
+        builder
+            .set_alpn_protos(protos)
+            .map_err(|_| NetError::SslProtocolError)?;
 
         // Apply Chrome TLS settings
         let tls_config = TlsConfig::default_chrome();
         tls_config.apply_to_builder(&mut builder)?;
 
         let connector = builder.build();
-        let config = connector.configure().map_err(|_| NetError::SslProtocolError)?;
+        let config = connector
+            .configure()
+            .map_err(|_| NetError::SslProtocolError)?;
 
-        let tls_stream = tokio_boring::connect(config, host, stream).await.map_err(|e| {
-            eprintln!("SSL Handshake failed: {:?}", e);
-            NetError::SslProtocolError
-        })?;
+        let tls_stream = tokio_boring::connect(config, host, stream)
+            .await
+            .map_err(|e| {
+                eprintln!("SSL Handshake failed: {:?}", e);
+                NetError::SslProtocolError
+            })?;
 
         let is_h2 = matches!(tls_stream.ssl().selected_alpn_protocol(), Some(b"h2"));
         Ok((tls_stream, is_h2))
@@ -229,18 +268,24 @@ impl ConnectJob {
             SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
 
         let protos = b"\x02h2\x08http/1.1";
-        builder.set_alpn_protos(protos).map_err(|_| NetError::SslProtocolError)?;
+        builder
+            .set_alpn_protos(protos)
+            .map_err(|_| NetError::SslProtocolError)?;
 
         let tls_config = TlsConfig::default_chrome();
         tls_config.apply_to_builder(&mut builder)?;
 
         let connector = builder.build();
-        let config = connector.configure().map_err(|_| NetError::SslProtocolError)?;
+        let config = connector
+            .configure()
+            .map_err(|_| NetError::SslProtocolError)?;
 
-        let tls_stream = tokio_boring::connect(config, host, stream).await.map_err(|_| {
-            eprintln!("SSL Handshake (TLS-in-TLS) failed for host: {}", host);
-            NetError::SslProtocolError
-        })?;
+        let tls_stream = tokio_boring::connect(config, host, stream)
+            .await
+            .map_err(|_| {
+                eprintln!("SSL Handshake (TLS-in-TLS) failed for host: {}", host);
+                NetError::SslProtocolError
+            })?;
 
         let is_h2 = matches!(tls_stream.ssl().selected_alpn_protocol(), Some(b"h2"));
         Ok((tls_stream, is_h2))
@@ -284,14 +329,20 @@ impl ConnectJob {
         }
         connect_req.push_str("\r\n");
 
-        stream.write_all(connect_req.as_bytes()).await.map_err(|_| NetError::ConnectionFailed)?;
+        stream
+            .write_all(connect_req.as_bytes())
+            .await
+            .map_err(|_| NetError::ConnectionFailed)?;
 
         // Read response
         let mut response = Vec::with_capacity(1024);
         let mut buf = [0u8; 256];
 
         loop {
-            let n = stream.read(&mut buf).await.map_err(|_| NetError::ConnectionFailed)?;
+            let n = stream
+                .read(&mut buf)
+                .await
+                .map_err(|_| NetError::ConnectionFailed)?;
             if n == 0 {
                 return Err(NetError::EmptyResponse);
             }
@@ -330,7 +381,10 @@ impl ConnectJob {
 
         // Phase 1: Greeting
         let greet = [SOCKS5_VERSION, 0x01, NO_AUTH];
-        stream.write_all(&greet).await.map_err(|_| NetError::ConnectionFailed)?;
+        stream
+            .write_all(&greet)
+            .await
+            .map_err(|_| NetError::ConnectionFailed)?;
 
         let mut greet_response = [0u8; 2];
         stream
@@ -353,7 +407,10 @@ impl ConnectJob {
         handshake.push((target_port >> 8) as u8);
         handshake.push((target_port & 0xFF) as u8);
 
-        stream.write_all(&handshake).await.map_err(|_| NetError::ConnectionFailed)?;
+        stream
+            .write_all(&handshake)
+            .await
+            .map_err(|_| NetError::ConnectionFailed)?;
 
         // Read response
         let mut response_header = [0u8; 5];
@@ -376,7 +433,10 @@ impl ConnectJob {
         };
 
         let mut remaining = vec![0u8; remaining_bytes];
-        stream.read_exact(&mut remaining).await.map_err(|_| NetError::SocksConnectionFailed)?;
+        stream
+            .read_exact(&mut remaining)
+            .await
+            .map_err(|_| NetError::SocksConnectionFailed)?;
 
         Ok(())
     }

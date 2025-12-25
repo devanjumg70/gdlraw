@@ -40,28 +40,52 @@ fn main() {
 
     let chrome_settings = H2Settings::chrome();
     println!("Chrome:");
-    println!("  Initial window size: {}", chrome_settings.initial_window_size);
+    println!(
+        "  Initial window size: {}",
+        chrome_settings.initial_window_size
+    );
     println!("  Max frame size: {}", chrome_settings.max_frame_size);
-    println!("  Max concurrent streams: {}", chrome_settings.max_concurrent_streams);
+    println!(
+        "  Max concurrent streams: {}",
+        chrome_settings.max_concurrent_streams
+    );
     println!("  Header table size: {}", chrome_settings.header_table_size);
     println!("  Enable push: {}", chrome_settings.enable_push);
 
     let firefox_settings = H2Settings::firefox();
     println!("\nFirefox:");
-    println!("  Initial window size: {}", firefox_settings.initial_window_size);
+    println!(
+        "  Initial window size: {}",
+        firefox_settings.initial_window_size
+    );
     println!("  Max frame size: {}", firefox_settings.max_frame_size);
-    println!("  Max concurrent streams: {}", firefox_settings.max_concurrent_streams);
+    println!(
+        "  Max concurrent streams: {}",
+        firefox_settings.max_concurrent_streams
+    );
 
     let safari_settings = H2Settings::safari();
     println!("\nSafari:");
-    println!("  Initial window size: {}", safari_settings.initial_window_size);
+    println!(
+        "  Initial window size: {}",
+        safari_settings.initial_window_size
+    );
     println!("  Max frame size: {}", safari_settings.max_frame_size);
-    println!("  Max concurrent streams: {}", safari_settings.max_concurrent_streams);
+    println!(
+        "  Max concurrent streams: {}",
+        safari_settings.max_concurrent_streams
+    );
 
     // Show key differences for fingerprinting
     println!("\n--- Fingerprinting Differences ---");
-    println!("Chrome initial_window_size: {} bytes", chrome_settings.initial_window_size);
-    println!("Firefox initial_window_size: {} bytes", firefox_settings.initial_window_size);
+    println!(
+        "Chrome initial_window_size: {} bytes",
+        chrome_settings.initial_window_size
+    );
+    println!(
+        "Firefox initial_window_size: {} bytes",
+        firefox_settings.initial_window_size
+    );
     println!(
         "Difference: {} bytes",
         chrome_settings.initial_window_size as i64 - firefox_settings.initial_window_size as i64

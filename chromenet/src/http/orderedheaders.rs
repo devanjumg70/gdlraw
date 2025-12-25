@@ -12,7 +12,9 @@ pub struct OrderedHeaderMap {
 
 impl OrderedHeaderMap {
     pub fn new() -> Self {
-        Self { headers: Vec::new() }
+        Self {
+            headers: Vec::new(),
+        }
     }
 
     pub fn insert(&mut self, name: &str, value: &str) -> Result<(), NetError> {
@@ -40,7 +42,10 @@ impl OrderedHeaderMap {
 
     pub fn get(&self, name: &str) -> Option<&HeaderValue> {
         if let Ok(target) = HeaderName::from_str(name) {
-            self.headers.iter().find(|(n, _)| n == target).map(|(_, v)| v)
+            self.headers
+                .iter()
+                .find(|(n, _)| n == target)
+                .map(|(_, v)| v)
         } else {
             None
         }
@@ -65,7 +70,10 @@ mod tests {
     fn test_insert_and_get() {
         let mut headers = OrderedHeaderMap::new();
         headers.insert("Content-Type", "application/json").unwrap();
-        assert_eq!(headers.get("Content-Type").unwrap().to_str().unwrap(), "application/json");
+        assert_eq!(
+            headers.get("Content-Type").unwrap().to_str().unwrap(),
+            "application/json"
+        );
     }
 
     #[test]
@@ -81,7 +89,10 @@ mod tests {
         let mut headers = OrderedHeaderMap::new();
         headers.insert("Host", "example.com").unwrap();
         headers.insert("Host", "updated.com").unwrap();
-        assert_eq!(headers.get("Host").unwrap().to_str().unwrap(), "updated.com");
+        assert_eq!(
+            headers.get("Host").unwrap().to_str().unwrap(),
+            "updated.com"
+        );
         // Should still be only one entry
         assert_eq!(headers.to_header_map().len(), 1);
     }

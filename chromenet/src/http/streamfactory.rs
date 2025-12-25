@@ -59,12 +59,18 @@ struct H2SessionCache {
 
 impl H2SessionCache {
     fn new() -> Self {
-        Self { sessions: DashMap::new() }
+        Self {
+            sessions: DashMap::new(),
+        }
     }
 
     /// Get session key from URL
     fn key(url: &Url) -> Option<String> {
-        Some(format!("{}:{}", url.host_str()?, url.port_or_known_default()?))
+        Some(format!(
+            "{}:{}",
+            url.host_str()?,
+            url.port_or_known_default()?
+        ))
     }
 
     /// Get an existing H2 sender if available and ready
@@ -105,7 +111,10 @@ pub struct HttpStreamFactory {
 
 impl HttpStreamFactory {
     pub fn new(pool: Arc<ClientSocketPool>) -> Self {
-        Self { pool, h2_cache: H2SessionCache::new() }
+        Self {
+            pool,
+            h2_cache: H2SessionCache::new(),
+        }
     }
 
     pub async fn create_stream(
@@ -118,7 +127,10 @@ impl HttpStreamFactory {
         if url.scheme() == "https" {
             if let Some(sender) = self.h2_cache.get(url) {
                 // Reuse existing H2 connection (multiplexing!)
-                return Ok(HttpStream { inner: HttpStreamInner::H2(sender), is_reused: true });
+                return Ok(HttpStream {
+                    inner: HttpStreamInner::H2(sender),
+                    is_reused: true,
+                });
             }
         }
 
@@ -153,11 +165,15 @@ impl HttpStreamFactory {
                 }
             });
 
-            Ok(HttpStream { inner: HttpStreamInner::H2(sender), is_reused: pool_result.is_reused })
+            Ok(HttpStream {
+                inner: HttpStreamInner::H2(sender),
+                is_reused: pool_result.is_reused,
+            })
         } else {
             // H1 Handshake (Default)
-            let (sender, conn) =
-                http1::handshake(io).await.map_err(|_| NetError::ConnectionFailed)?;
+            let (sender, conn) = http1::handshake(io)
+                .await
+                .map_err(|_| NetError::ConnectionFailed)?;
 
             spawn(async move {
                 if let Err(e) = conn.await {
@@ -165,7 +181,10 @@ impl HttpStreamFactory {
                 }
             });
 
-            Ok(HttpStream { inner: HttpStreamInner::H1(sender), is_reused: pool_result.is_reused })
+            Ok(HttpStream {
+                inner: HttpStreamInner::H1(sender),
+                is_reused: pool_result.is_reused,
+            })
         }
     }
 

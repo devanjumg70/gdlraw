@@ -60,19 +60,32 @@ pub struct RetryConfig {
 
 impl Default for RetryConfig {
     fn default() -> Self {
-        Self { max_attempts: 3, base_delay_ms: 100, max_delay_ms: 5000, jitter_factor: 0.1 }
+        Self {
+            max_attempts: 3,
+            base_delay_ms: 100,
+            max_delay_ms: 5000,
+            jitter_factor: 0.1,
+        }
     }
 }
 
 impl RetryConfig {
     /// Create a config with no retries.
     pub fn no_retry() -> Self {
-        Self { max_attempts: 0, ..Default::default() }
+        Self {
+            max_attempts: 0,
+            ..Default::default()
+        }
     }
 
     /// Create a config with aggressive retries.
     pub fn aggressive() -> Self {
-        Self { max_attempts: 5, base_delay_ms: 50, max_delay_ms: 10000, jitter_factor: 0.2 }
+        Self {
+            max_attempts: 5,
+            base_delay_ms: 50,
+            max_delay_ms: 10000,
+            jitter_factor: 0.2,
+        }
     }
 }
 
@@ -86,7 +99,9 @@ pub fn calculate_backoff(attempt: usize, config: &RetryConfig) -> Duration {
     }
 
     // Exponential: base * 2^(attempt-1)
-    let delay_ms = config.base_delay_ms.saturating_mul(1 << (attempt - 1).min(10));
+    let delay_ms = config
+        .base_delay_ms
+        .saturating_mul(1 << (attempt - 1).min(10));
     let capped_ms = delay_ms.min(config.max_delay_ms);
 
     // Add jitter
@@ -113,7 +128,10 @@ mod tests {
 
     #[test]
     fn test_backoff_exponential() {
-        let config = RetryConfig { jitter_factor: 0.0, ..Default::default() };
+        let config = RetryConfig {
+            jitter_factor: 0.0,
+            ..Default::default()
+        };
 
         assert_eq!(calculate_backoff(0, &config), Duration::ZERO);
         assert_eq!(calculate_backoff(1, &config), Duration::from_millis(100));

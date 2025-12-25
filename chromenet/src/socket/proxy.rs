@@ -18,7 +18,11 @@ impl ProxySettings {
     pub fn new(url_str: &str) -> Option<Self> {
         let url = Url::parse(url_str).ok()?;
         // Basic validation of scheme?
-        Some(Self { url, username: None, password: None })
+        Some(Self {
+            url,
+            username: None,
+            password: None,
+        })
     }
 
     pub fn with_auth(mut self, user: &str, pass: &str) -> Self {

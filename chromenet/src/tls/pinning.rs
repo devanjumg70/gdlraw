@@ -30,7 +30,12 @@ pub struct PinSet {
 impl PinSet {
     /// Create a new pin set for a domain.
     pub fn new(domain: impl Into<String>) -> Self {
-        Self { domain: domain.into(), include_subdomains: false, pins: Vec::new(), expires: None }
+        Self {
+            domain: domain.into(),
+            include_subdomains: false,
+            pins: Vec::new(),
+            expires: None,
+        }
     }
 
     /// Add a pin (base64-encoded SHA-256 hash).
@@ -101,7 +106,9 @@ impl Default for PinStore {
 impl PinStore {
     /// Create a new empty pin store.
     pub fn new() -> Self {
-        Self { pins: Arc::new(DashMap::new()) }
+        Self {
+            pins: Arc::new(DashMap::new()),
+        }
     }
 
     /// Add or replace a pin set.
@@ -176,7 +183,9 @@ pub fn spki_hash(cert_der: &[u8]) -> Result<SpkiHash, NetError> {
 
     // Get the public key in DER format (this is the SPKI)
     let pubkey = cert.public_key().map_err(|_| NetError::CertPinningFailed)?;
-    let spki_der = pubkey.public_key_to_der().map_err(|_| NetError::CertPinningFailed)?;
+    let spki_der = pubkey
+        .public_key_to_der()
+        .map_err(|_| NetError::CertPinningFailed)?;
 
     // Hash with SHA-256
     let digest =

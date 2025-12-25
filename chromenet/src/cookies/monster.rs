@@ -27,7 +27,9 @@ impl Default for CookieMonster {
 
 impl CookieMonster {
     pub fn new() -> Self {
-        Self { store: Arc::new(DashMap::new()) }
+        Self {
+            store: Arc::new(DashMap::new()),
+        }
     }
 
     pub fn set_canonical_cookie(&self, cookie: CanonicalCookie) {
@@ -39,8 +41,11 @@ impl CookieMonster {
         // Enforce per-domain limit with LRU eviction
         while entry.len() >= MAX_COOKIES_PER_DOMAIN {
             // Remove oldest cookie (by creation_time)
-            if let Some(oldest_idx) =
-                entry.iter().enumerate().min_by_key(|(_, c)| c.creation_time).map(|(i, _)| i)
+            if let Some(oldest_idx) = entry
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, c)| c.creation_time)
+                .map(|(i, _)| i)
             {
                 entry.remove(oldest_idx);
             } else {
@@ -124,7 +129,10 @@ impl CookieMonster {
 
         // Sort by path length (longest first) then creation time
         result.sort_by(|a, b| {
-            b.path.len().cmp(&a.path.len()).then_with(|| a.creation_time.cmp(&b.creation_time))
+            b.path
+                .len()
+                .cmp(&a.path.len())
+                .then_with(|| a.creation_time.cmp(&b.creation_time))
         });
 
         result
@@ -150,8 +158,9 @@ impl CookieMonster {
             let suffix = &request_host[request_host.len() - cookie_domain.len()..];
             if suffix.eq_ignore_ascii_case(cookie_domain) {
                 // Check that the character before is a dot
-                let char_before =
-                    request_host.chars().nth(request_host.len() - cookie_domain.len() - 1);
+                let char_before = request_host
+                    .chars()
+                    .nth(request_host.len() - cookie_domain.len() - 1);
                 return char_before == Some('.');
             }
         }

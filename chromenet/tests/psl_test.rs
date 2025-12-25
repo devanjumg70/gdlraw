@@ -23,9 +23,18 @@ fn test_domain_not_public_suffix() {
 #[test]
 fn test_registrable_domain_extraction() {
     // eTLD+1 extraction
-    assert_eq!(registrable_domain("www.example.com"), Some("example.com".to_string()));
-    assert_eq!(registrable_domain("sub.example.com"), Some("example.com".to_string()));
-    assert_eq!(registrable_domain("www.bbc.co.uk"), Some("bbc.co.uk".to_string()));
+    assert_eq!(
+        registrable_domain("www.example.com"),
+        Some("example.com".to_string())
+    );
+    assert_eq!(
+        registrable_domain("sub.example.com"),
+        Some("example.com".to_string())
+    );
+    assert_eq!(
+        registrable_domain("www.bbc.co.uk"),
+        Some("bbc.co.uk".to_string())
+    );
 }
 
 #[test]

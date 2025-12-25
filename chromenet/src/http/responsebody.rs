@@ -19,7 +19,11 @@ impl ResponseBody {
     /// Read entire body as bytes.
     pub async fn bytes(self) -> Result<Bytes, NetError> {
         use http_body_util::BodyExt;
-        let collected = self.inner.collect().await.map_err(|_| NetError::HttpBodyError)?;
+        let collected = self
+            .inner
+            .collect()
+            .await
+            .map_err(|_| NetError::HttpBodyError)?;
         Ok(collected.to_bytes())
     }
 

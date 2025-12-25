@@ -102,7 +102,9 @@ impl HttpNetworkTransaction {
     /// Add a header to the request.
     /// Returns an error if the header name or value is invalid.
     pub fn add_header(&mut self, key: &str, value: &str) -> Result<(), NetError> {
-        self.request_headers.insert(key, value).map_err(|_| NetError::InvalidUrl)
+        self.request_headers
+            .insert(key, value)
+            .map_err(|_| NetError::InvalidUrl)
     }
 
     /// Start the transaction with automatic retry on connection failures.
@@ -166,7 +168,11 @@ impl HttpNetworkTransaction {
                     }
 
                     // Build request
-                    let version = if is_h2 { Version::HTTP_2 } else { Version::HTTP_11 };
+                    let version = if is_h2 {
+                        Version::HTTP_2
+                    } else {
+                        Version::HTTP_11
+                    };
                     let builder = Request::builder().uri(self.url.as_str()).version(version);
 
                     let headers_map = self.request_headers.clone().to_header_map();
@@ -224,6 +230,8 @@ impl HttpNetworkTransaction {
     /// Take ownership of the response, converting to HttpResponse.
     /// Can only be called once - subsequent calls return None.
     pub fn take_response(&mut self) -> Option<crate::http::response::HttpResponse> {
-        self.response.take().map(crate::http::response::HttpResponse::from_hyper)
+        self.response
+            .take()
+            .map(crate::http::response::HttpResponse::from_hyper)
     }
 }

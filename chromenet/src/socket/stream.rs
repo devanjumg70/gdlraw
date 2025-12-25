@@ -38,7 +38,9 @@ pub struct BoxedSocket {
 impl BoxedSocket {
     /// Create a new BoxedSocket from any StreamSocket.
     pub fn new<S: StreamSocket>(socket: S) -> Self {
-        Self { inner: Box::pin(socket) }
+        Self {
+            inner: Box::pin(socket),
+        }
     }
 
     /// Get a pinned mutable reference to the inner socket.

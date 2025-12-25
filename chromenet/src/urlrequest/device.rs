@@ -34,7 +34,10 @@ impl Device {
             headers.push(("Sec-CH-UA-Mobile".to_string(), mobile.to_string()));
 
             // Sec-CH-UA-Platform
-            headers.push(("Sec-CH-UA-Platform".to_string(), format!("\"{}\"", meta.platform)));
+            headers.push((
+                "Sec-CH-UA-Platform".to_string(),
+                format!("\"{}\"", meta.platform),
+            ));
 
             // Sec-CH-UA-Platform-Version (if available)
             if !meta.platform_version.is_empty() {

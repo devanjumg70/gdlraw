@@ -6,7 +6,9 @@ use criterion::{criterion_group, criterion_main, Criterion};
 fn hsts_lookup_preloaded(c: &mut Criterion) {
     let store = HstsStore::with_preload();
 
-    c.bench_function("hsts_lookup_hit", |b| b.iter(|| store.should_upgrade("google.com")));
+    c.bench_function("hsts_lookup_hit", |b| {
+        b.iter(|| store.should_upgrade("google.com"))
+    });
 
     c.bench_function("hsts_lookup_miss", |b| {
         b.iter(|| store.should_upgrade("unknown-domain-12345.com"))

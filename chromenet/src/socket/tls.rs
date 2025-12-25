@@ -42,7 +42,11 @@ impl TlsConfig {
             enable_ocsp_stapling: true,
             enable_signed_cert_timestamps: true,
             // Chrome's default curves
-            curves: vec!["X25519".to_string(), "P-256".to_string(), "P-384".to_string()],
+            curves: vec![
+                "X25519".to_string(),
+                "P-256".to_string(),
+                "P-384".to_string(),
+            ],
             sigalgs: "ECDSA+SHA256:RSA-PSS+SHA256:RSA+SHA256:\
                 ECDSA+SHA384:RSA-PSS+SHA384:RSA+SHA384:\
                 RSA-PSS+SHA512:RSA+SHA512"
@@ -54,14 +58,20 @@ impl TlsConfig {
     pub fn apply_to_builder(&self, builder: &mut SslConnectorBuilder) -> Result<(), NetError> {
         // Set TLS versions
         if let Some(min) = self.min_version {
-            builder.set_min_proto_version(Some(min)).map_err(|_| NetError::SslProtocolError)?;
+            builder
+                .set_min_proto_version(Some(min))
+                .map_err(|_| NetError::SslProtocolError)?;
         }
         if let Some(max) = self.max_version {
-            builder.set_max_proto_version(Some(max)).map_err(|_| NetError::SslProtocolError)?;
+            builder
+                .set_max_proto_version(Some(max))
+                .map_err(|_| NetError::SslProtocolError)?;
         }
 
         // Set cipher list
-        builder.set_cipher_list(&self.cipher_list).map_err(|_| NetError::SslProtocolError)?;
+        builder
+            .set_cipher_list(&self.cipher_list)
+            .map_err(|_| NetError::SslProtocolError)?;
 
         // Set ALPN protocols
         if !self.alpn_protos.is_empty() {
@@ -73,7 +83,9 @@ impl TlsConfig {
                 alpn_wire.push(proto.len() as u8);
                 alpn_wire.extend_from_slice(proto.as_bytes());
             }
-            builder.set_alpn_protos(&alpn_wire).map_err(|_| NetError::SslProtocolError)?;
+            builder
+                .set_alpn_protos(&alpn_wire)
+                .map_err(|_| NetError::SslProtocolError)?;
         }
 
         // Enable GREASE explicitly
@@ -86,13 +98,17 @@ impl TlsConfig {
 
         // Set signature algorithms
         if !self.sigalgs.is_empty() {
-            builder.set_sigalgs_list(&self.sigalgs).map_err(|_| NetError::SslProtocolError)?;
+            builder
+                .set_sigalgs_list(&self.sigalgs)
+                .map_err(|_| NetError::SslProtocolError)?;
         }
 
         // Set curves/groups
         if !self.curves.is_empty() {
             let curves_str = self.curves.join(":");
-            builder.set_curves_list(&curves_str).map_err(|_| NetError::SslProtocolError)?;
+            builder
+                .set_curves_list(&curves_str)
+                .map_err(|_| NetError::SslProtocolError)?;
         }
 
         // Certificate verification (use system verifier)

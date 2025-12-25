@@ -80,8 +80,9 @@ pub fn load_cookies(path: &Path) -> io::Result<CookieMonster> {
             }
         }
 
-        let expiration_time =
-            pc.expires_unix_secs.and_then(|s| OffsetDateTime::from_unix_timestamp(s).ok());
+        let expiration_time = pc
+            .expires_unix_secs
+            .and_then(|s| OffsetDateTime::from_unix_timestamp(s).ok());
 
         let cookie = CanonicalCookie {
             name: pc.name,

@@ -100,7 +100,7 @@ fn decrypt_aes_cbc(key: &[u8; 16], iv: &[u8; 16], data: &[u8]) -> Option<Vec<u8>
     use boring::symm::{Cipher, Crypter, Mode};
 
     // Data must be a multiple of block size
-    if data.is_empty() || data.len() % 16 != 0 {
+    if data.is_empty() || !data.len().is_multiple_of(16) {
         return None;
     }
 

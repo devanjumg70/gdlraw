@@ -60,7 +60,9 @@ impl Default for CtVerifier {
 impl CtVerifier {
     /// Create a new CT verifier with soft-fail requirement.
     pub fn new() -> Self {
-        Self { requirement: CtRequirement::SoftFail }
+        Self {
+            requirement: CtRequirement::SoftFail,
+        }
     }
 
     /// Set the CT requirement level.

@@ -21,7 +21,10 @@ async fn test_retry_on_reused_socket_failure() {
         let mut buf = [0u8; 1024];
         let n = socket.read(&mut buf).await.unwrap();
         // Respond OK
-        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK").await.unwrap();
+        socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+            .await
+            .unwrap();
 
         // Wait then close (simulating timeout or disconnect)
         // We drop socket here.
@@ -30,7 +33,10 @@ async fn test_retry_on_reused_socket_failure() {
         // Handle 2nd connection (Retry)
         if let Ok((mut socket2, _)) = listener.accept().await {
             let n = socket2.read(&mut buf).await.unwrap();
-            socket2.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nRETRY").await.unwrap();
+            socket2
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nRETRY")
+                .await
+                .unwrap();
         }
     });
 

@@ -24,12 +24,18 @@ impl HstsEntry {
     pub fn new(include_subdomains: bool, max_age_secs: Option<u64>) -> Self {
         let expires =
             max_age_secs.map(|secs| OffsetDateTime::now_utc() + Duration::seconds(secs as i64));
-        Self { include_subdomains, expires }
+        Self {
+            include_subdomains,
+            expires,
+        }
     }
 
     /// Create a permanent/preloaded entry.
     pub fn preloaded(include_subdomains: bool) -> Self {
-        Self { include_subdomains, expires: None }
+        Self {
+            include_subdomains,
+            expires: None,
+        }
     }
 
     /// Check if this entry has expired.
@@ -57,7 +63,9 @@ impl Default for HstsStore {
 impl HstsStore {
     /// Create a new empty HSTS store.
     pub fn new() -> Self {
-        Self { entries: Arc::new(DashMap::new()) }
+        Self {
+            entries: Arc::new(DashMap::new()),
+        }
     }
 
     /// Create an HSTS store with common preloaded domains.
@@ -87,7 +95,10 @@ impl HstsStore {
 
     /// Add a preloaded (permanent) HSTS entry.
     pub fn add_preloaded(&self, domain: &str, include_subdomains: bool) {
-        self.entries.insert(domain.to_lowercase(), HstsEntry::preloaded(include_subdomains));
+        self.entries.insert(
+            domain.to_lowercase(),
+            HstsEntry::preloaded(include_subdomains),
+        );
     }
 
     /// Check if a host should be upgraded to HTTPS.
@@ -139,8 +150,10 @@ impl HstsStore {
                 // max-age=0 removes the entry
                 self.entries.remove(&host.to_lowercase());
             } else {
-                self.entries
-                    .insert(host.to_lowercase(), HstsEntry::new(include_subdomains, Some(secs)));
+                self.entries.insert(
+                    host.to_lowercase(),
+                    HstsEntry::new(include_subdomains, Some(secs)),
+                );
             }
         }
     }

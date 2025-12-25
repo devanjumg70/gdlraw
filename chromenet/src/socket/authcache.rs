@@ -82,7 +82,9 @@ impl Default for AuthCache {
 impl AuthCache {
     /// Create a new empty auth cache.
     pub fn new() -> Self {
-        Self { entries: Arc::new(DashMap::new()) }
+        Self {
+            entries: Arc::new(DashMap::new()),
+        }
     }
 
     /// Generate cache key from host and realm.
@@ -151,8 +153,18 @@ mod tests {
     #[test]
     fn test_different_realms() {
         let cache = AuthCache::new();
-        cache.store("proxy.com", 80, "Realm1", AuthEntry::basic("Realm1", "user1", "pass1"));
-        cache.store("proxy.com", 80, "Realm2", AuthEntry::basic("Realm2", "user2", "pass2"));
+        cache.store(
+            "proxy.com",
+            80,
+            "Realm1",
+            AuthEntry::basic("Realm1", "user1", "pass1"),
+        );
+        cache.store(
+            "proxy.com",
+            80,
+            "Realm2",
+            AuthEntry::basic("Realm2", "user2", "pass2"),
+        );
 
         let r1 = cache.lookup("proxy.com", 80, "Realm1").unwrap();
         let r2 = cache.lookup("proxy.com", 80, "Realm2").unwrap();
@@ -164,9 +176,24 @@ mod tests {
     #[test]
     fn test_remove_host() {
         let cache = AuthCache::new();
-        cache.store("proxy.com", 80, "Realm1", AuthEntry::basic("Realm1", "u", "p"));
-        cache.store("proxy.com", 80, "Realm2", AuthEntry::basic("Realm2", "u", "p"));
-        cache.store("other.com", 80, "Realm1", AuthEntry::basic("Realm1", "u", "p"));
+        cache.store(
+            "proxy.com",
+            80,
+            "Realm1",
+            AuthEntry::basic("Realm1", "u", "p"),
+        );
+        cache.store(
+            "proxy.com",
+            80,
+            "Realm2",
+            AuthEntry::basic("Realm2", "u", "p"),
+        );
+        cache.store(
+            "other.com",
+            80,
+            "Realm1",
+            AuthEntry::basic("Realm1", "u", "p"),
+        );
 
         cache.remove_host("proxy.com", 80);
 
@@ -178,7 +205,12 @@ mod tests {
     #[test]
     fn test_case_insensitive_host() {
         let cache = AuthCache::new();
-        cache.store("Proxy.COM", 80, "Realm", AuthEntry::basic("Realm", "u", "p"));
+        cache.store(
+            "Proxy.COM",
+            80,
+            "Realm",
+            AuthEntry::basic("Realm", "u", "p"),
+        );
 
         assert!(cache.lookup("proxy.com", 80, "Realm").is_some());
         assert!(cache.lookup("PROXY.COM", 80, "Realm").is_some());

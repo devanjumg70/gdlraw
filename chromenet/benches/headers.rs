@@ -7,7 +7,9 @@ fn benchmark_headers_to_header_map(c: &mut Criterion) {
         "Accept",
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
     ).unwrap();
-    headers.insert("Accept-Encoding", "gzip, deflate, br").unwrap();
+    headers
+        .insert("Accept-Encoding", "gzip, deflate, br")
+        .unwrap();
     headers.insert("Accept-Language", "en-GB,en;q=0.9").unwrap();
     headers.insert("Cache-Control", "max-age=0").unwrap();
     headers.insert(
@@ -50,5 +52,9 @@ fn benchmark_headers_insert(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, benchmark_headers_to_header_map, benchmark_headers_insert);
+criterion_group!(
+    benches,
+    benchmark_headers_to_header_map,
+    benchmark_headers_insert
+);
 criterion_main!(benches);

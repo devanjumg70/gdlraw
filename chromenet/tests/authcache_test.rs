@@ -22,8 +22,18 @@ fn test_store_and_retrieve() {
 fn test_different_ports() {
     let cache = AuthCache::new();
 
-    cache.store("proxy.com", 8080, "Realm", AuthEntry::basic("Realm", "user1", "pass1"));
-    cache.store("proxy.com", 8888, "Realm", AuthEntry::basic("Realm", "user2", "pass2"));
+    cache.store(
+        "proxy.com",
+        8080,
+        "Realm",
+        AuthEntry::basic("Realm", "user1", "pass1"),
+    );
+    cache.store(
+        "proxy.com",
+        8888,
+        "Realm",
+        AuthEntry::basic("Realm", "user2", "pass2"),
+    );
 
     // Different ports should have different credentials
     let entry1 = cache.lookup("proxy.com", 8080, "Realm").unwrap();
@@ -37,8 +47,18 @@ fn test_different_ports() {
 fn test_different_realms() {
     let cache = AuthCache::new();
 
-    cache.store("proxy.com", 80, "Admin", AuthEntry::basic("Admin", "admin", "secret"));
-    cache.store("proxy.com", 80, "User", AuthEntry::basic("User", "guest", "public"));
+    cache.store(
+        "proxy.com",
+        80,
+        "Admin",
+        AuthEntry::basic("Admin", "admin", "secret"),
+    );
+    cache.store(
+        "proxy.com",
+        80,
+        "User",
+        AuthEntry::basic("User", "guest", "public"),
+    );
 
     let admin = cache.lookup("proxy.com", 80, "Admin").unwrap();
     let user = cache.lookup("proxy.com", 80, "User").unwrap();
@@ -60,9 +80,24 @@ fn test_authorization_header() {
 fn test_remove_host() {
     let cache = AuthCache::new();
 
-    cache.store("proxy.com", 80, "Realm1", AuthEntry::basic("Realm1", "u", "p"));
-    cache.store("proxy.com", 80, "Realm2", AuthEntry::basic("Realm2", "u", "p"));
-    cache.store("other.com", 80, "Realm", AuthEntry::basic("Realm", "u", "p"));
+    cache.store(
+        "proxy.com",
+        80,
+        "Realm1",
+        AuthEntry::basic("Realm1", "u", "p"),
+    );
+    cache.store(
+        "proxy.com",
+        80,
+        "Realm2",
+        AuthEntry::basic("Realm2", "u", "p"),
+    );
+    cache.store(
+        "other.com",
+        80,
+        "Realm",
+        AuthEntry::basic("Realm", "u", "p"),
+    );
 
     cache.remove_host("proxy.com", 80);
 

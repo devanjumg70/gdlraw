@@ -98,7 +98,11 @@ struct IdleSocket {
 
 impl Group {
     fn new() -> Self {
-        Self { idle_sockets: VecDeque::new(), active_count: 0, pending_requests: Vec::new() }
+        Self {
+            idle_sockets: VecDeque::new(),
+            active_count: 0,
+            pending_requests: Vec::new(),
+        }
     }
 
     fn total_slots(&self) -> usize {
@@ -179,7 +183,8 @@ impl ClientSocketPool {
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
     ) -> Result<PoolResult, NetError> {
-        self.request_socket_with_priority(url, proxy, RequestPriority::default()).await
+        self.request_socket_with_priority(url, proxy, RequestPriority::default())
+            .await
     }
 
     /// Request a socket with specified priority.
@@ -200,7 +205,10 @@ impl ClientSocketPool {
         // Queue the request and wait
         let (tx, rx) = oneshot::channel();
         {
-            let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
+            let mut group = self
+                .groups
+                .entry(group_id.clone())
+                .or_insert_with(Group::new);
             group.pending_requests.push(PendingRequest {
                 priority,
                 sender: tx,
@@ -221,7 +229,10 @@ impl ClientSocketPool {
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
     ) -> Result<Option<PoolResult>, NetError> {
-        let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
+        let mut group = self
+            .groups
+            .entry(group_id.clone())
+            .or_insert_with(Group::new);
 
         // 1. Check for idle socket
         if let Some(idle_socket) = group.idle_sockets.pop_front() {
@@ -258,7 +269,10 @@ impl ClientSocketPool {
             })),
             Err(e) => {
                 // Decrement on failure
-                let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
+                let mut group = self
+                    .groups
+                    .entry(group_id.clone())
+                    .or_insert_with(Group::new);
                 group.active_count = group.active_count.saturating_sub(1);
                 self.total_active.fetch_sub(1, Ordering::Relaxed);
                 Err(e)
@@ -273,7 +287,10 @@ impl ClientSocketPool {
         };
 
         let pending_request = {
-            let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
+            let mut group = self
+                .groups
+                .entry(group_id.clone())
+                .or_insert_with(Group::new);
             group.active_count = group.active_count.saturating_sub(1);
             self.total_active.fetch_sub(1, Ordering::Relaxed);
 
@@ -284,12 +301,19 @@ impl ClientSocketPool {
 
         if let Some(request) = pending_request {
             // Hand socket to waiting request
-            let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
+            let mut group = self
+                .groups
+                .entry(group_id.clone())
+                .or_insert_with(Group::new);
             group.active_count += 1;
             self.total_active.fetch_add(1, Ordering::Relaxed);
             drop(group);
 
-            let _ = request.sender.send(Ok(PoolResult { socket, is_h2, is_reused: true }));
+            let _ = request.sender.send(Ok(PoolResult {
+                socket,
+                is_h2,
+                is_reused: true,
+            }));
         } else {
             // Return to idle pool with timestamp
             let mut group = self.groups.entry(group_id).or_insert_with(Group::new);
@@ -310,7 +334,10 @@ impl ClientSocketPool {
 
         // Decrement count and process any waiting requests
         let pending = {
-            let mut group = self.groups.entry(group_id.clone()).or_insert_with(Group::new);
+            let mut group = self
+                .groups
+                .entry(group_id.clone())
+                .or_insert_with(Group::new);
             group.active_count = group.active_count.saturating_sub(1);
             self.total_active.fetch_sub(1, Ordering::Relaxed);
             group.pop_highest_priority_request()
@@ -379,8 +406,11 @@ impl ClientSocketPool {
             // Remove expired idle sockets
             group.idle_sockets.retain(|idle_socket| {
                 let elapsed = now.duration_since(idle_socket.start_time);
-                let timeout =
-                    if idle_socket.was_used { USED_IDLE_TIMEOUT } else { UNUSED_IDLE_TIMEOUT };
+                let timeout = if idle_socket.was_used {
+                    USED_IDLE_TIMEOUT
+                } else {
+                    UNUSED_IDLE_TIMEOUT
+                };
 
                 // Keep socket if not expired and still connected
                 elapsed < timeout && idle_socket.socket.is_connected()

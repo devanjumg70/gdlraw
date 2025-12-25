@@ -116,7 +116,10 @@ pub struct WrappedSocket {
 
 impl WrappedSocket {
     pub fn new(socket: SocketType) -> Self {
-        Self { inner: socket, was_used: false }
+        Self {
+            inner: socket,
+            was_used: false,
+        }
     }
 
     /// Mark the socket as having been used for a request.

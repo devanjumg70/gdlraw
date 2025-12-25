@@ -91,15 +91,30 @@ mod tests {
 
     #[test]
     fn test_registrable_domain() {
-        assert_eq!(registrable_domain("example.com"), Some("example.com".to_string()));
-        assert_eq!(registrable_domain("sub.example.com"), Some("example.com".to_string()));
-        assert_eq!(registrable_domain("deep.sub.example.com"), Some("example.com".to_string()));
+        assert_eq!(
+            registrable_domain("example.com"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            registrable_domain("sub.example.com"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            registrable_domain("deep.sub.example.com"),
+            Some("example.com".to_string())
+        );
     }
 
     #[test]
     fn test_registrable_domain_co_uk() {
-        assert_eq!(registrable_domain("example.co.uk"), Some("example.co.uk".to_string()));
-        assert_eq!(registrable_domain("sub.example.co.uk"), Some("example.co.uk".to_string()));
+        assert_eq!(
+            registrable_domain("example.co.uk"),
+            Some("example.co.uk".to_string())
+        );
+        assert_eq!(
+            registrable_domain("sub.example.co.uk"),
+            Some("example.co.uk".to_string())
+        );
     }
 
     #[test]

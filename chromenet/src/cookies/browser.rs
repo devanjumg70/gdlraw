@@ -431,24 +431,22 @@ impl BrowserCookieReader {
         let mut cookies = Vec::new();
         let now = OffsetDateTime::now_utc();
 
-        for cookie_result in cookie_iter {
-            if let Ok(row) = cookie_result {
-                let cookie = CanonicalCookie {
-                    name: row.name,
-                    value: row.value,
-                    domain: row.host.clone(),
-                    path: row.path,
-                    expiration_time: firefox_time_to_offset(row.expiry),
-                    secure: row.is_secure != 0,
-                    http_only: row.is_http_only != 0,
-                    same_site: firefox_samesite(row.same_site),
-                    priority: CookiePriority::Medium,
-                    creation_time: now,
-                    last_access_time: now,
-                    host_only: !row.host.starts_with('.'),
-                };
-                cookies.push(cookie);
-            }
+        for row in cookie_iter.flatten() {
+            let cookie = CanonicalCookie {
+                name: row.name,
+                value: row.value,
+                domain: row.host.clone(),
+                path: row.path,
+                expiration_time: firefox_time_to_offset(row.expiry),
+                secure: row.is_secure != 0,
+                http_only: row.is_http_only != 0,
+                same_site: firefox_samesite(row.same_site),
+                priority: CookiePriority::Medium,
+                creation_time: now,
+                last_access_time: now,
+                host_only: !row.host.starts_with('.'),
+            };
+            cookies.push(cookie);
         }
 
         Ok(cookies)
@@ -538,7 +536,7 @@ fn chrome_time_to_offset(timestamp: i64) -> Option<OffsetDateTime> {
     }
     // Chrome epoch is 1601-01-01, Unix epoch is 1970-01-01
     // Difference: 11644473600 seconds
-    let unix_micros = timestamp - 11644473600_000_000;
+    let unix_micros = timestamp - 11_644_473_600_000_000;
     OffsetDateTime::from_unix_timestamp_nanos(unix_micros as i128 * 1000).ok()
 }
 

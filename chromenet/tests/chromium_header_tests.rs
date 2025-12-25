@@ -42,7 +42,10 @@ fn test_set_multiple_headers() {
     let mut headers = OrderedHeaderMap::new();
     headers.insert("Cookie-Monster", "Nom nom nom").unwrap();
     headers.insert("Domo-Kun", "Loves Chrome").unwrap();
-    assert_headers_eq(&headers, "cookie-monster: Nom nom nom\r\ndomo-kun: Loves Chrome\r\n\r\n");
+    assert_headers_eq(
+        &headers,
+        "cookie-monster: Nom nom nom\r\ndomo-kun: Loves Chrome\r\n\r\n",
+    );
 }
 
 #[test]
@@ -82,7 +85,9 @@ fn test_remove_header_missing() {
 fn test_remove_header_case_insensitive() {
     let mut headers = OrderedHeaderMap::new();
     headers.insert("Foo", "bar").unwrap();
-    headers.insert("All-Your-Base", "Belongs To Chrome").unwrap();
+    headers
+        .insert("All-Your-Base", "Belongs To Chrome")
+        .unwrap();
     headers.remove("foo");
     assert_headers_eq(&headers, "all-your-base: Belongs To Chrome\r\n\r\n");
 }

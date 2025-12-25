@@ -48,18 +48,30 @@ impl HttpResponse {
 
     /// Convenience method to consume body as bytes.
     pub async fn bytes(mut self) -> Result<bytes::Bytes, crate::base::neterror::NetError> {
-        self.body.take().ok_or(crate::base::neterror::NetError::HttpBodyError)?.bytes().await
+        self.body
+            .take()
+            .ok_or(crate::base::neterror::NetError::HttpBodyError)?
+            .bytes()
+            .await
     }
 
     /// Convenience method to consume body as text.
     pub async fn text(mut self) -> Result<String, crate::base::neterror::NetError> {
-        self.body.take().ok_or(crate::base::neterror::NetError::HttpBodyError)?.text().await
+        self.body
+            .take()
+            .ok_or(crate::base::neterror::NetError::HttpBodyError)?
+            .text()
+            .await
     }
 
     /// Convenience method to consume body as JSON.
     pub async fn json<T: serde::de::DeserializeOwned>(
         mut self,
     ) -> Result<T, crate::base::neterror::NetError> {
-        self.body.take().ok_or(crate::base::neterror::NetError::HttpBodyError)?.json().await
+        self.body
+            .take()
+            .ok_or(crate::base::neterror::NetError::HttpBodyError)?
+            .json()
+            .await
     }
 }

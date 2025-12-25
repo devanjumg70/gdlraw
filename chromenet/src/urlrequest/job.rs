@@ -116,8 +116,11 @@ impl URLRequestHttpJob {
                 }
 
                 // Get status code for method computation
-                let status_code =
-                    self.transaction.get_response().map(|r| r.status().as_u16()).unwrap_or(0);
+                let status_code = self
+                    .transaction
+                    .get_response()
+                    .map(|r| r.status().as_u16())
+                    .unwrap_or(0);
 
                 // Compute new method per RFC 7231 (Chromium's ComputeMethodForRedirect)
                 let new_method = compute_method_for_redirect(&self.method, status_code);
@@ -137,7 +140,8 @@ impl URLRequestHttpJob {
                 let is_cross_origin = self.url.origin() != new_url.origin();
 
                 if is_cross_origin {
-                    self.extra_headers.retain(|(k, _)| !k.eq_ignore_ascii_case("Authorization"));
+                    self.extra_headers
+                        .retain(|(k, _)| !k.eq_ignore_ascii_case("Authorization"));
                     // Strip credentials from URL (CVE-2014-1829 fix)
                     let _ = new_url.set_username("");
                     let _ = new_url.set_password(None);
@@ -192,7 +196,8 @@ impl URLRequestHttpJob {
     }
 
     pub fn add_header(&mut self, key: &str, value: &str) {
-        self.extra_headers.push((key.to_string(), value.to_string()));
+        self.extra_headers
+            .push((key.to_string(), value.to_string()));
         // Best-effort: ignore errors for already-added headers
         let _ = self.transaction.add_header(key, value);
     }
@@ -218,7 +223,10 @@ mod tests {
     fn test_303_any_becomes_get() {
         assert_eq!(compute_method_for_redirect(&Method::POST, 303), Method::GET);
         assert_eq!(compute_method_for_redirect(&Method::PUT, 303), Method::GET);
-        assert_eq!(compute_method_for_redirect(&Method::DELETE, 303), Method::GET);
+        assert_eq!(
+            compute_method_for_redirect(&Method::DELETE, 303),
+            Method::GET
+        );
     }
 
     #[test]
@@ -229,14 +237,23 @@ mod tests {
 
     #[test]
     fn test_307_preserves_method() {
-        assert_eq!(compute_method_for_redirect(&Method::POST, 307), Method::POST);
+        assert_eq!(
+            compute_method_for_redirect(&Method::POST, 307),
+            Method::POST
+        );
         assert_eq!(compute_method_for_redirect(&Method::PUT, 307), Method::PUT);
-        assert_eq!(compute_method_for_redirect(&Method::DELETE, 307), Method::DELETE);
+        assert_eq!(
+            compute_method_for_redirect(&Method::DELETE, 307),
+            Method::DELETE
+        );
     }
 
     #[test]
     fn test_308_preserves_method() {
-        assert_eq!(compute_method_for_redirect(&Method::POST, 308), Method::POST);
+        assert_eq!(
+            compute_method_for_redirect(&Method::POST, 308),
+            Method::POST
+        );
         assert_eq!(compute_method_for_redirect(&Method::PUT, 308), Method::PUT);
     }
 

@@ -6,7 +6,9 @@ use url::Url;
 /// These are pure in-memory operations that don't require network I/O.
 fn benchmark_pool_operations(c: &mut Criterion) {
     // Benchmark pool creation
-    c.bench_function("pool_new", |b| b.iter(|| black_box(ClientSocketPool::new())));
+    c.bench_function("pool_new", |b| {
+        b.iter(|| black_box(ClientSocketPool::new()))
+    });
 
     // Benchmark pool statistics (pure memory operations)
     let pool = ClientSocketPool::new();
@@ -20,7 +22,9 @@ fn benchmark_pool_operations(c: &mut Criterion) {
     });
 
     // Benchmark idle socket count (pure memory op)
-    c.bench_function("pool_idle_socket_count", |b| b.iter(|| black_box(pool.idle_socket_count())));
+    c.bench_function("pool_idle_socket_count", |b| {
+        b.iter(|| black_box(pool.idle_socket_count()))
+    });
 }
 
 criterion_group!(benches, benchmark_pool_operations);
