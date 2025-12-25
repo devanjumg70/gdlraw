@@ -1,31 +1,76 @@
 //! Browser cookie extraction from Chrome/Firefox SQLite databases.
 //!
 //! Reads cookies from local browser databases for session reuse.
-//! Note: Encrypted cookies (v10/v11 on Windows/macOS) require
-//! platform-specific decryption (DPAPI/Keychain) not yet implemented.
+//! Supports Chrome, Chromium, Edge, Brave, Opera, Firefox, and Safari.
+//!
+//! ## Encryption Support
+//! - **Linux v10**: Fully supported (hardcoded key + empty key fallback)
+//! - **Linux v11**: Requires keyring access (not yet implemented)
+//! - **macOS**: Requires Keychain access (not yet implemented)
+//! - **Windows**: Requires DPAPI (not yet implemented)
 
 use crate::base::neterror::NetError;
 use crate::cookies::canonical_cookie::{CanonicalCookie, CookiePriority, SameSite};
+use crate::cookies::error::{CookieExtractionError, CookieResult};
+use crate::cookies::oscrypt;
 use std::path::PathBuf;
 use time::OffsetDateTime;
 
 /// Supported browsers for cookie extraction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Browser {
+    /// Google Chrome
     Chrome,
+    /// Chromium (open-source Chrome)
+    Chromium,
+    /// Microsoft Edge (Chromium-based)
+    Edge,
+    /// Brave Browser
+    Brave,
+    /// Opera Browser
+    Opera,
+    /// Mozilla Firefox
     Firefox,
+    /// Apple Safari (macOS only)
+    Safari,
+}
+
+impl Browser {
+    /// Returns true if this is a Chromium-based browser.
+    pub fn is_chromium_based(&self) -> bool {
+        matches!(
+            self,
+            Browser::Chrome | Browser::Chromium | Browser::Edge | Browser::Brave | Browser::Opera
+        )
+    }
+
+    /// Returns all Chromium-based browsers.
+    pub fn all_chromium() -> &'static [Browser] {
+        &[
+            Browser::Chrome,
+            Browser::Chromium,
+            Browser::Edge,
+            Browser::Brave,
+            Browser::Opera,
+        ]
+    }
 }
 
 /// Reader for browser cookie databases.
 pub struct BrowserCookieReader {
     browser: Browser,
     profile: Option<String>,
+    domain_filter: Option<String>,
 }
 
 impl BrowserCookieReader {
     /// Create a new reader for the specified browser.
     pub fn new(browser: Browser) -> Self {
-        Self { browser, profile: None }
+        Self {
+            browser,
+            profile: None,
+            domain_filter: None,
+        }
     }
 
     /// Use a specific profile (default: "Default" for Chrome, first profile for Firefox).
@@ -34,29 +79,44 @@ impl BrowserCookieReader {
         self
     }
 
+    /// Filter cookies by domain.
+    pub fn domain(mut self, domain: impl Into<String>) -> Self {
+        self.domain_filter = Some(domain.into());
+        self
+    }
+
     /// Get the path to the browser's cookie database.
     pub fn get_db_path(&self) -> Option<PathBuf> {
         match self.browser {
-            Browser::Chrome => self.chrome_cookie_path(),
+            Browser::Chrome => self.chromium_cookie_path("google-chrome", "Google/Chrome"),
+            Browser::Chromium => self.chromium_cookie_path("chromium", "Chromium"),
+            Browser::Edge => self.chromium_cookie_path("microsoft-edge", "Microsoft/Edge"),
+            Browser::Brave => self
+                .chromium_cookie_path("BraveSoftware/Brave-Browser", "BraveSoftware/Brave-Browser"),
+            Browser::Opera => self.chromium_cookie_path("opera", "com.operasoftware.Opera"),
             Browser::Firefox => self.firefox_cookie_path(),
+            Browser::Safari => self.safari_cookie_path(),
         }
     }
 
-    fn chrome_cookie_path(&self) -> Option<PathBuf> {
+    fn chromium_cookie_path(&self, linux_name: &str, _macos_name: &str) -> Option<PathBuf> {
         let profile = self.profile.as_deref().unwrap_or("Default");
 
         #[cfg(target_os = "linux")]
         {
             let home = std::env::var("HOME").ok()?;
-            Some(PathBuf::from(format!("{}/.config/google-chrome/{}/Cookies", home, profile)))
+            Some(PathBuf::from(format!(
+                "{}/.config/{}/{}/Cookies",
+                home, linux_name, profile
+            )))
         }
 
         #[cfg(target_os = "macos")]
         {
             let home = std::env::var("HOME").ok()?;
             Some(PathBuf::from(format!(
-                "{}/Library/Application Support/Google/Chrome/{}/Cookies",
-                home, profile
+                "{}/Library/Application Support/{}/{}/Cookies",
+                home, macos_name, profile
             )))
         }
 
@@ -64,14 +124,31 @@ impl BrowserCookieReader {
         {
             let local_app_data = std::env::var("LOCALAPPDATA").ok()?;
             Some(PathBuf::from(format!(
-                "{}/Google/Chrome/User Data/{}/Network/Cookies",
-                local_app_data, profile
+                "{}/{}/User Data/{}/Network/Cookies",
+                local_app_data, macos_name, profile
             )))
         }
 
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         {
+            let _ = (linux_name, macos_name, profile);
             None
+        }
+    }
+
+    fn safari_cookie_path(&self) -> Option<PathBuf> {
+        #[cfg(target_os = "macos")]
+        {
+            let home = std::env::var("HOME").ok()?;
+            Some(PathBuf::from(format!(
+                "{}/Library/Cookies/Cookies.binarycookies",
+                home
+            )))
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            None // Safari is macOS-only
         }
     }
 
@@ -101,8 +178,10 @@ impl BrowserCookieReader {
         #[cfg(target_os = "macos")]
         {
             let home = std::env::var("HOME").ok()?;
-            let firefox_dir =
-                PathBuf::from(format!("{}/Library/Application Support/Firefox/Profiles", home));
+            let firefox_dir = PathBuf::from(format!(
+                "{}/Library/Application Support/Firefox/Profiles",
+                home
+            ));
 
             if let Some(profile) = &self.profile {
                 return Some(firefox_dir.join(profile).join("cookies.sqlite"));
@@ -155,12 +234,40 @@ impl BrowserCookieReader {
         }
 
         match self.browser {
-            Browser::Chrome => self.read_chrome_cookies(&db_path),
+            Browser::Chrome
+            | Browser::Chromium
+            | Browser::Edge
+            | Browser::Brave
+            | Browser::Opera => self.read_chromium_cookies(&db_path),
             Browser::Firefox => self.read_firefox_cookies(&db_path),
+            Browser::Safari => Err(NetError::NotImplemented), // Binary format not yet supported
         }
     }
 
-    fn read_chrome_cookies(&self, path: &PathBuf) -> Result<Vec<CanonicalCookie>, NetError> {
+    /// Read cookies with better error handling.
+    pub fn read_cookies_v2(&self) -> CookieResult<Vec<CanonicalCookie>> {
+        let db_path = self
+            .get_db_path()
+            .ok_or_else(|| CookieExtractionError::BrowserNotFound(format!("{:?}", self.browser)))?;
+
+        if !db_path.exists() {
+            return Err(CookieExtractionError::DatabaseNotFound(db_path));
+        }
+
+        match self.browser {
+            Browser::Chrome
+            | Browser::Chromium
+            | Browser::Edge
+            | Browser::Brave
+            | Browser::Opera => self.read_chromium_cookies_v2(&db_path),
+            Browser::Firefox => self.read_firefox_cookies_v2(&db_path),
+            Browser::Safari => Err(CookieExtractionError::PlatformNotSupported(
+                "Safari binary cookies not yet implemented".into(),
+            )),
+        }
+    }
+
+    fn read_chromium_cookies(&self, path: &PathBuf) -> Result<Vec<CanonicalCookie>, NetError> {
         use rusqlite::{Connection, OpenFlags};
 
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
@@ -168,53 +275,126 @@ impl BrowserCookieReader {
 
         let mut stmt = conn
             .prepare(
-                "SELECT host_key, name, value, path, expires_utc, is_secure, is_httponly, samesite
-             FROM cookies",
+                "SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, samesite
+                 FROM cookies",
             )
-            .map_err(|_| NetError::InvalidResponse)?;
-
-        let cookie_iter = stmt
-            .query_map([], |row| {
-                Ok(ChromeCookieRow {
-                    host_key: row.get(0)?,
-                    name: row.get(1)?,
-                    value: row.get(2)?,
-                    path: row.get(3)?,
-                    expires_utc: row.get(4)?,
-                    is_secure: row.get(5)?,
-                    is_httponly: row.get(6)?,
-                    samesite: row.get(7)?,
-                })
-            })
             .map_err(|_| NetError::InvalidResponse)?;
 
         let mut cookies = Vec::new();
         let now = OffsetDateTime::now_utc();
 
-        for cookie_result in cookie_iter {
-            if let Ok(row) = cookie_result {
-                // Skip encrypted cookies (empty value means encrypted)
-                if row.value.is_empty() {
+        let mut rows = stmt.query([]).map_err(|_| NetError::InvalidResponse)?;
+
+        while let Some(row) = rows.next().map_err(|_| NetError::InvalidResponse)? {
+            let host_key: String = row.get(0).unwrap_or_default();
+            let name: String = row.get(1).unwrap_or_default();
+            let value: String = row.get(2).unwrap_or_default();
+            let encrypted_value: Vec<u8> = row.get(3).unwrap_or_default();
+            let path: String = row.get(4).unwrap_or_default();
+            let expires_utc: i64 = row.get(5).unwrap_or(0);
+            let is_secure: i32 = row.get(6).unwrap_or(0);
+            let is_httponly: i32 = row.get(7).unwrap_or(0);
+            let samesite: i32 = row.get(8).unwrap_or(-1);
+
+            // Apply domain filter
+            if let Some(ref filter) = self.domain_filter {
+                if !host_key.ends_with(filter) && !host_key.trim_start_matches('.').eq(filter) {
                     continue;
                 }
-
-                let host_only = !row.host_key.starts_with('.');
-                let cookie = CanonicalCookie {
-                    name: row.name,
-                    value: row.value,
-                    domain: row.host_key,
-                    path: row.path,
-                    expiration_time: chrome_time_to_offset(row.expires_utc),
-                    secure: row.is_secure != 0,
-                    http_only: row.is_httponly != 0,
-                    same_site: chrome_samesite(row.samesite),
-                    priority: CookiePriority::Medium,
-                    creation_time: now,
-                    last_access_time: now,
-                    host_only,
-                };
-                cookies.push(cookie);
             }
+
+            // Determine the cookie value
+            let cookie_value = if !value.is_empty() {
+                value
+            } else if !encrypted_value.is_empty() {
+                // Try to decrypt
+                match oscrypt::decrypt_v10(&encrypted_value) {
+                    Some(decrypted) => decrypted,
+                    None => continue, // Skip if decryption fails
+                }
+            } else {
+                continue; // Skip cookies with no value
+            };
+
+            let host_only = !host_key.starts_with('.');
+            let cookie = CanonicalCookie {
+                name,
+                value: cookie_value,
+                domain: host_key,
+                path,
+                expiration_time: chrome_time_to_offset(expires_utc),
+                secure: is_secure != 0,
+                http_only: is_httponly != 0,
+                same_site: chrome_samesite(samesite),
+                priority: CookiePriority::Medium,
+                creation_time: now,
+                last_access_time: now,
+                host_only,
+            };
+            cookies.push(cookie);
+        }
+
+        Ok(cookies)
+    }
+
+    fn read_chromium_cookies_v2(&self, path: &PathBuf) -> CookieResult<Vec<CanonicalCookie>> {
+        use rusqlite::{Connection, OpenFlags};
+
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+
+        let mut stmt = conn.prepare(
+            "SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, samesite
+             FROM cookies",
+        )?;
+
+        let mut cookies = Vec::new();
+        let now = OffsetDateTime::now_utc();
+
+        let mut rows = stmt.query([])?;
+
+        while let Some(row) = rows.next()? {
+            let host_key: String = row.get(0).unwrap_or_default();
+            let name: String = row.get(1).unwrap_or_default();
+            let value: String = row.get(2).unwrap_or_default();
+            let encrypted_value: Vec<u8> = row.get(3).unwrap_or_default();
+            let path: String = row.get(4).unwrap_or_default();
+            let expires_utc: i64 = row.get(5).unwrap_or(0);
+            let is_secure: i32 = row.get(6).unwrap_or(0);
+            let is_httponly: i32 = row.get(7).unwrap_or(0);
+            let samesite: i32 = row.get(8).unwrap_or(-1);
+
+            // Apply domain filter
+            if let Some(ref filter) = self.domain_filter {
+                if !host_key.ends_with(filter) && !host_key.trim_start_matches('.').eq(filter) {
+                    continue;
+                }
+            }
+
+            // Determine the cookie value
+            let cookie_value = if !value.is_empty() {
+                value
+            } else if !encrypted_value.is_empty() {
+                oscrypt::decrypt_cookie(&encrypted_value)?
+            } else {
+                continue;
+            };
+
+            let host_only = !host_key.starts_with('.');
+            let cookie = CanonicalCookie {
+                name,
+                value: cookie_value,
+                domain: host_key,
+                path,
+                expiration_time: chrome_time_to_offset(expires_utc),
+                secure: is_secure != 0,
+                http_only: is_httponly != 0,
+                same_site: chrome_samesite(samesite),
+                priority: CookiePriority::Medium,
+                creation_time: now,
+                last_access_time: now,
+                host_only,
+            };
+            cookies.push(cookie);
         }
 
         Ok(cookies)
@@ -273,8 +453,61 @@ impl BrowserCookieReader {
 
         Ok(cookies)
     }
+
+    fn read_firefox_cookies_v2(&self, path: &PathBuf) -> CookieResult<Vec<CanonicalCookie>> {
+        use rusqlite::{Connection, OpenFlags};
+
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+
+        let mut stmt = conn.prepare(
+            "SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite
+             FROM moz_cookies",
+        )?;
+
+        let mut cookies = Vec::new();
+        let now = OffsetDateTime::now_utc();
+
+        let mut rows = stmt.query([])?;
+
+        while let Some(row) = rows.next()? {
+            let host: String = row.get(0).unwrap_or_default();
+            let name: String = row.get(1).unwrap_or_default();
+            let value: String = row.get(2).unwrap_or_default();
+            let path: String = row.get(3).unwrap_or_default();
+            let expiry: i64 = row.get(4).unwrap_or(0);
+            let is_secure: i32 = row.get(5).unwrap_or(0);
+            let is_http_only: i32 = row.get(6).unwrap_or(0);
+            let same_site: i32 = row.get(7).unwrap_or(0);
+
+            // Apply domain filter
+            if let Some(ref filter) = self.domain_filter {
+                if !host.ends_with(filter) && !host.trim_start_matches('.').eq(filter) {
+                    continue;
+                }
+            }
+
+            let cookie = CanonicalCookie {
+                name,
+                value, // Firefox stores cookies in plaintext
+                domain: host.clone(),
+                path,
+                expiration_time: firefox_time_to_offset(expiry),
+                secure: is_secure != 0,
+                http_only: is_http_only != 0,
+                same_site: firefox_samesite(same_site),
+                priority: CookiePriority::Medium,
+                creation_time: now,
+                last_access_time: now,
+                host_only: !host.starts_with('.'),
+            };
+            cookies.push(cookie);
+        }
+
+        Ok(cookies)
+    }
 }
 
+#[allow(dead_code)]
 struct ChromeCookieRow {
     host_key: String,
     name: String,
