@@ -1,11 +1,15 @@
 # Socket Module
 
 ## Files
-- [pool.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/socket/pool.rs) (~420 lines)
-- [connectjob.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/socket/connectjob.rs) (~315 lines)
-- [tls.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/socket/tls.rs) (~100 lines)
-- [proxy.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/socket/proxy.rs) (49 lines)
-- [client.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/socket/client.rs) (~100 lines)
+| File | Lines | Purpose |
+|------|-------|---------|
+| [pool.rs](../src/socket/pool.rs) | ~420 | Connection pooling |
+| [connectjob.rs](../src/socket/connectjob.rs) | ~315 | Connection establishment |
+| [tls.rs](../src/socket/tls.rs) | ~100 | TLS configuration |
+| [proxy.rs](../src/socket/proxy.rs) | ~50 | Proxy settings |
+| [client.rs](../src/socket/client.rs) | ~100 | Client socket wrapper |
+| [stream.rs](../src/socket/stream.rs) | ~80 | Stream abstractions |
+| [authcache.rs](../src/socket/authcache.rs) | ~190 | Auth credential cache (NEW) |
 
 ---
 
@@ -19,6 +23,7 @@ Manages connection pooling with Chromium-like limits and **request queuing**.
 | Request Queuing | Pending requests queue instead of failing |
 | Priority Queue | Higher priority requests served first |
 | Idle Socket Cleanup | Background task prunes stale sockets |
+| **H2 Multiplexing** | Reuse HTTP/2 connections (NEW) |
 
 ### Limits
 | Limit | Default | Chromium |
@@ -31,14 +36,6 @@ Manages connection pooling with Chromium-like limits and **request queuing**.
 |------|---------|
 | Used sockets | 5 minutes |
 | Unused sockets | 10 seconds |
-
-### Key Methods
-```rust
-request_socket_with_priority(url, proxy, priority)
-release_socket(url, socket)
-cleanup_idle_sockets()
-start_cleanup_task()  // Background cleanup every 60s
-```
 
 ---
 
@@ -58,8 +55,8 @@ Handles DNS → TCP → (Proxy) → TLS pipeline with **Happy Eyeballs** and **S
 | Type | Status |
 |------|--------|
 | HTTP CONNECT | ✅ Implemented |
-| SOCKS5 | ✅ Implemented (RFC 1928) |
-| HTTPS | ⏳ Foundation ready (StreamSocket) |
+| HTTPS CONNECT | ✅ TLS-in-TLS |
+| SOCKS5 | ✅ RFC 1928 |
 
 ### Flow
 ```mermaid
@@ -67,14 +64,44 @@ graph LR
     A[DNS Lookup] --> B[Happy Eyeballs TCP]
     B --> C{Proxy?}
     C -->|HTTP| D[HTTP CONNECT]
+    C -->|HTTPS| D2[TLS + HTTP CONNECT]
     C -->|SOCKS5| E[SOCKS5 Handshake]
     C -->|No| F{HTTPS?}
     D --> F
+    D2 --> F
     E --> F
     F -->|Yes| G[TLS Handshake]
     F -->|No| H[Return TCP]
     G --> I[Return SSL]
 ```
+
+---
+
+## AuthCache (NEW)
+
+Cache proxy authentication credentials to avoid re-prompting.
+
+```rust
+use chromenet::socket::authcache::{AuthCache, AuthEntry};
+
+let cache = AuthCache::new();
+
+// Store credentials
+cache.store("proxy.com", 8080, "MyRealm", 
+    AuthEntry::basic("MyRealm", "user", "pass"));
+
+// Lookup for subsequent requests
+if let Some(entry) = cache.lookup("proxy.com", 8080, "MyRealm") {
+    let header = entry.to_header_value(); // "Basic dXNlcjpwYXNz"
+}
+```
+
+### Supported Schemes
+| Scheme | Status |
+|--------|--------|
+| Basic | ✅ Implemented |
+| Digest | ⚙️ Stub |
+| NTLM | ⚙️ Stub |
 
 ---
 
@@ -116,17 +143,3 @@ pub struct BoxedSocket {
     inner: Pin<Box<dyn StreamSocket>>,
 }
 ```
-
----
-
-## SocketType
-
-Unified socket wrapper with **real health checks**.
-
-```rust
-pub enum SocketType {
-    Tcp(tokio::net::TcpStream),
-    Ssl(tokio_boring::SslStream<TcpStream>),
-}
-```
-

@@ -2,6 +2,8 @@
 
 Complete flow diagrams and scenarios for the chromenet library.
 
+**Stats:** ~6,000 LOC | 112 tests | 9 benchmarks | 4 examples
+
 ## High-Level Architecture
 
 ```mermaid
@@ -14,13 +16,14 @@ graph TB
     subgraph "HTTP Layer"
         TXN[HttpNetworkTransaction]
         SF[HttpStreamFactory]
+        H2C[H2SessionCache]
         RETRY[Retry Logic]
     end
 
     subgraph "Connection Layer"
         POOL[ClientSocketPool]
         CJ[ConnectJob]
-        STREAM[StreamSocket]
+        AUTH[AuthCache]
     end
 
     subgraph "Transport Layer"
@@ -29,8 +32,16 @@ graph TB
         PROXY[Proxy Handshake]
     end
 
-    subgraph "State Management"
+    subgraph "Security Layer"
+        HSTS[HstsStore]
+        PINS[PinStore]
+        CT[CtVerifier]
+    end
+
+    subgraph "Cookie Management"
         COOKIE[CookieMonster]
+        PSL[PSL Validation]
+        BROWSER[Browser Extraction]
         PERSIST[Persistence]
     end
 
@@ -38,16 +49,22 @@ graph TB
     CTX --> TXN
     TXN --> RETRY
     TXN --> SF
+    SF --> H2C
     SF --> POOL
     POOL --> CJ
+    POOL --> AUTH
     CJ --> TCP
     CJ --> PROXY
     PROXY --> TLS
-    TCP --> STREAM
-    TLS --> STREAM
+    TCP --> TLS
 
     TXN --> COOKIE
+    COOKIE --> PSL
     COOKIE --> PERSIST
+    BROWSER --> COOKIE
+    
+    CJ --> HSTS
+    CJ --> PINS
 ```
 
 ---
@@ -58,12 +75,15 @@ graph TB
 sequenceDiagram
     participant App
     participant URLRequest
+    participant HSTS
     participant Transaction
     participant Pool
     participant ConnectJob
     participant Server
 
     App->>URLRequest: new(https://example.com)
+    URLRequest->>HSTS: should_upgrade?
+    HSTS-->>URLRequest: No (already HTTPS)
     URLRequest->>Transaction: start()
     Transaction->>Pool: request_socket()
     Pool->>ConnectJob: connect()
@@ -74,106 +94,94 @@ sequenceDiagram
     Pool-->>Transaction: HttpStream
     Transaction->>Server: HTTP/2 request
     Server-->>Transaction: Response + Set-Cookie
-    Transaction->>CookieMonster: save cookies
+    Transaction->>CookieMonster: save cookies (PSL validated)
     Transaction-->>App: Response
 ```
 
 ---
 
-## Scenario 2: Request with HTTP Proxy
+## Scenario 2: HSTS Upgrade
 
 ```mermaid
 sequenceDiagram
     participant App
+    participant URLRequest
+    participant HSTS
     participant Transaction
-    participant ConnectJob
-    participant Proxy
-    participant Server
 
-    App->>Transaction: start() with proxy
-    Transaction->>ConnectJob: connect(proxy)
-    ConnectJob->>Proxy: TCP connect
-    ConnectJob->>Proxy: HTTP CONNECT example.com:443
-    Proxy-->>ConnectJob: 200 Connection Established
-    ConnectJob->>Server: TLS handshake (through tunnel)
-    ConnectJob-->>Transaction: SslStream
-    Transaction->>Server: HTTP request
-    Server-->>Transaction: Response
+    App->>URLRequest: new(http://google.com)
+    URLRequest->>HSTS: should_upgrade("google.com")?
+    HSTS-->>URLRequest: Yes (preloaded)
+    URLRequest->>URLRequest: Upgrade to https://google.com
+    URLRequest->>Transaction: start()
+    Note over Transaction: Proceeds with HTTPS
 ```
 
 ---
 
-## Scenario 3: Connection Retry with Backoff
+## Scenario 3: Certificate Pinning
 
 ```mermaid
 sequenceDiagram
-    participant App
-    participant Transaction
-    participant RetryLogic
     participant ConnectJob
+    participant PinStore
     participant Server
 
-    App->>Transaction: start()
-    Transaction->>ConnectJob: connect()
-    ConnectJob->>Server: TCP connect
-    Server-->>ConnectJob: RST (connection reset)
-    ConnectJob-->>Transaction: ConnectionReset
-
-    Transaction->>RetryLogic: should_retry?
-    RetryLogic-->>Transaction: Yes (attempt 1 < 3)
-    Transaction->>Transaction: sleep(100ms)
-
-    Transaction->>ConnectJob: connect() retry
-    ConnectJob->>Server: TCP connect
-    Server-->>ConnectJob: Success
-    Transaction-->>App: Response
+    ConnectJob->>Server: TLS handshake
+    Server-->>ConnectJob: Certificate chain
+    ConnectJob->>ConnectJob: Compute SPKI hashes
+    ConnectJob->>PinStore: check(host, hashes)
+    alt Pins match
+        PinStore-->>ConnectJob: Ok
+        ConnectJob-->>App: Connection established
+    else Pins mismatch
+        PinStore-->>ConnectJob: Err(CertPinningFailed)
+        ConnectJob-->>App: Error
+    end
 ```
 
 ---
 
-## Scenario 4: Socket Pool Reuse
+## Scenario 4: H2 Multiplexing
 
 ```mermaid
 sequenceDiagram
     participant Req1
     participant Req2
-    participant Pool
+    participant Factory
+    participant Cache
     participant Server
 
-    Req1->>Pool: request_socket(example.com)
-    Pool->>Server: New connection
-    Server-->>Pool: SslStream
-    Pool-->>Req1: Stream
+    Req1->>Factory: create_stream(example.com)
+    Factory->>Cache: lookup(example.com)?
+    Cache-->>Factory: None
+    Factory->>Server: New H2 connection
+    Server-->>Factory: H2 sender
+    Factory->>Cache: store(example.com, sender.clone())
+    Factory-->>Req1: Stream
 
-    Req1->>Req1: Complete request
-    Req1->>Pool: release_socket(stream)
-
-    Req2->>Pool: request_socket(example.com)
-    Pool-->>Req2: Reused stream (no connect)
+    Req2->>Factory: create_stream(example.com)
+    Factory->>Cache: lookup(example.com)?
+    Cache-->>Factory: Cached sender
+    Factory-->>Req2: Multiplexed stream (no new connection!)
 ```
 
 ---
 
-## Scenario 5: Cookie Flow
+## Scenario 5: Cookie with PSL Validation
 
 ```mermaid
 sequenceDiagram
+    participant Server
     participant Transaction
     participant CookieMonster
-    participant Disk
+    participant PSL
 
-    Transaction->>CookieMonster: get_cookies_for_url()
-    CookieMonster-->>Transaction: [session=abc]
-    Transaction->>Server: Request + Cookie header
-
-    Server-->>Transaction: Response + Set-Cookie: token=xyz
-
+    Server-->>Transaction: Set-Cookie: session=abc; Domain=.com
     Transaction->>CookieMonster: parse_and_save_cookie()
-    CookieMonster->>CookieMonster: enforce_per_domain_limit(50)
-    CookieMonster->>CookieMonster: enforce_global_limit(3000)
-
-    Note over CookieMonster,Disk: Optional persistence
-    CookieMonster->>Disk: save_cookies()
+    CookieMonster->>PSL: is_public_suffix(".com")?
+    PSL-->>CookieMonster: Yes (public suffix!)
+    CookieMonster-->>Transaction: Cookie REJECTED (supercookie attack)
 ```
 
 ---
@@ -183,7 +191,21 @@ sequenceDiagram
 | Module | Files | Responsibility |
 |--------|-------|----------------|
 | `urlrequest` | request.rs, job.rs, context.rs, device.rs | Public API |
-| `http` | transaction.rs, streamfactory.rs, retry.rs | HTTP/1.1 & H2 |
-| `socket` | pool.rs, connectjob.rs, stream.rs, tls.rs, proxy.rs | Connections |
-| `cookies` | monster.rs, canonical_cookie.rs, persistence.rs | Cookie state |
+| `http` | transaction.rs, streamfactory.rs, retry.rs, h2settings.rs, orderedheaders.rs | HTTP/1.1 & H2 |
+| `socket` | pool.rs, connectjob.rs, stream.rs, tls.rs, proxy.rs, authcache.rs | Connections |
+| `cookies` | monster.rs, canonical_cookie.rs, persistence.rs, psl.rs, browser.rs, oscrypt.rs | Cookie state |
+| `tls` | hsts.rs, pinning.rs, ct.rs | Security |
 | `base` | neterror.rs, loadstate.rs | Common types |
+
+---
+
+## Test Coverage
+
+| Module | Unit Tests | Integration Tests |
+|--------|------------|-------------------|
+| cookies | 17 | 6 (psl_test) |
+| http | 20 | - |
+| socket | 7 | 6 (authcache_test) |
+| tls | 21 | 12 (hsts_test, pinning_test) |
+| urlrequest | 9 | - |
+| **Total** | **88** | **24** |
