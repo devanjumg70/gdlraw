@@ -1,4 +1,5 @@
 use url::Url;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProxyType {
@@ -11,7 +12,7 @@ pub enum ProxyType {
 pub struct ProxySettings {
     pub url: Url, // e.g. http://proxy.com:8080 or socks5://...
     pub username: Option<String>,
-    pub password: Option<String>,
+    pub password: Option<Zeroizing<String>>,
 }
 
 impl ProxySettings {
@@ -27,7 +28,7 @@ impl ProxySettings {
 
     pub fn with_auth(mut self, user: &str, pass: &str) -> Self {
         self.username = Some(user.to_string());
-        self.password = Some(pass.to_string());
+        self.password = Some(Zeroizing::new(pass.to_string()));
         self
     }
 
@@ -42,7 +43,7 @@ impl ProxySettings {
     pub fn get_auth_header(&self) -> Option<String> {
         if let (Some(u), Some(p)) = (&self.username, &self.password) {
             use base64::{engine::general_purpose, Engine as _};
-            let creds = format!("{}:{}", u, p);
+            let creds = format!("{}:{}", u, p.as_str());
             let encoded = general_purpose::STANDARD.encode(creds);
             Some(format!("Basic {}", encoded))
         } else {

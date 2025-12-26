@@ -15,6 +15,10 @@ const IPV6_FALLBACK_DELAY: Duration = Duration::from_millis(250);
 /// Connection timeout (4 minutes, matches Chromium).
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(240);
 
+/// ALPN protocols: h2, http/1.1
+/// Wire format: length-prefixed strings
+const ALPN_PROTOS: &[u8] = b"\x02h2\x08http/1.1";
+
 /// Result of a connection attempt, includes ALPN negotiation info.
 pub struct ConnectResult {
     pub socket: BoxedSocket,
@@ -234,9 +238,8 @@ impl ConnectJob {
             SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
 
         // ALPN for H2 and H1
-        let protos = b"\x02h2\x08http/1.1";
         builder
-            .set_alpn_protos(protos)
+            .set_alpn_protos(ALPN_PROTOS)
             .map_err(|_| NetError::SslProtocolError)?;
 
         // Apply Chrome TLS settings
@@ -267,9 +270,9 @@ impl ConnectJob {
         let mut builder =
             SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
 
-        let protos = b"\x02h2\x08http/1.1";
+        // ALPN for H2 and H1
         builder
-            .set_alpn_protos(protos)
+            .set_alpn_protos(ALPN_PROTOS)
             .map_err(|_| NetError::SslProtocolError)?;
 
         let tls_config = TlsConfig::default_chrome();

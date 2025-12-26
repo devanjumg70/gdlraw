@@ -24,16 +24,16 @@ pub enum RequestPriority {
 /// Identifies a connection group (scheme, host, port).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct GroupId {
-    scheme: String,
-    host: String,
+    scheme: Arc<str>,
+    host: Arc<str>,
     port: u16,
 }
 
 impl GroupId {
     fn from_url(url: &Url) -> Option<Self> {
         Some(GroupId {
-            scheme: url.scheme().to_string(),
-            host: url.host_str()?.to_string(),
+            scheme: url.scheme().into(),
+            host: url.host_str()?.into(),
             port: url.port_or_known_default()?,
         })
     }
