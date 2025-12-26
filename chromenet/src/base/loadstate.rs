@@ -19,13 +19,20 @@ pub enum LoadState {
     WaitingForCache,
 
     /// Waiting for the app cache.
-    WaitingForAppCache,
+    #[deprecated(note = "Obsolete in Chromium")]
+    ObsoleteWaitingForAppCache,
 
     /// Downloading the PAC script.
     DownloadingPacFile,
 
     /// Resolving the proxy.
     ResolvingProxyForUrl,
+
+    /// Resolving the host in PAC file.
+    ResolvingHostInPacFile,
+
+    /// Establishing proxy tunnel.
+    EstablishingProxyTunnel,
 
     /// Resolving the host.
     ResolvingHost,

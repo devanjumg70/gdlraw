@@ -104,6 +104,13 @@ impl StreamSocket for SocketType {
     }
 }
 
+// Implement the pool-compatible StreamSocket trait
+impl crate::socket::stream::StreamSocket for SocketType {
+    fn is_connected(&self) -> bool {
+        <Self as StreamSocket>::is_connected(self)
+    }
+}
+
 use crate::base::neterror::NetError;
 
 /// Wrapper around SocketType that tracks usage state for proper reuse detection.

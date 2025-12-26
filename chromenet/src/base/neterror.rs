@@ -428,19 +428,19 @@ impl NetError {
             NetError::Http2StreamClosed => -376,
             NetError::Http2ClientRefusedStream => -377,
             NetError::Http2PushedResponseDoesNotMatch => -378,
-            // Edge case errors (custom codes starting at -900)
-            NetError::RedirectCycleDetected => -900,
-            NetError::SocketRemoteClosed => -901,
-            NetError::DataReceivedUnexpectedly => -902,
-            NetError::CookieInvalidPrefix => -903,
-            NetError::CookiePublicSuffix => -904,
-            NetError::InvalidHeader => -905,
-            NetError::HttpBodyError => -906,
-            NetError::InvalidUtf8 => -907,
-            NetError::JsonParseError => -908,
-            NetError::CertPinningFailed => -909,
-            NetError::NotImplemented => -910,
-            NetError::FileNotFound => -911,
+            // Edge case errors (custom codes starting at -10000 to avoid collision with Chromium Blob errors)
+            NetError::RedirectCycleDetected => -10000,
+            NetError::SocketRemoteClosed => -10001,
+            NetError::DataReceivedUnexpectedly => -10002,
+            NetError::CookieInvalidPrefix => -10003,
+            NetError::CookiePublicSuffix => -10004,
+            NetError::InvalidHeader => -10005,
+            NetError::HttpBodyError => -10006,
+            NetError::InvalidUtf8 => -10007,
+            NetError::JsonParseError => -10008,
+            NetError::CertPinningFailed => -10009,
+            NetError::NotImplemented => -10010,
+            NetError::FileNotFound => -10011,
             NetError::Unknown(code) => *code,
         }
     }
@@ -580,6 +580,28 @@ impl From<i32> for NetError {
             -376 => NetError::Http2StreamClosed,
             -377 => NetError::Http2ClientRefusedStream,
             -378 => NetError::Http2PushedResponseDoesNotMatch,
+            // Fix critical error code collisions in neterror.rs where custom chromenet errors
+            // overlap with Chromium's Blob error range (-900 to -906), and update loadstate.rs
+            // to include missing load states found in Chromium's load_states_list.h.
+            //
+            // User Review Required
+            // WARNING
+            //
+            // Breaking Change: NetError codes for custom errors (like RedirectCycleDetected)
+            // will change from the -900 range to the -10000 range to avoid future conflicts
+            // with Chromium's Blob errors.
+            -10000 => NetError::RedirectCycleDetected,
+            -10001 => NetError::SocketRemoteClosed,
+            -10002 => NetError::DataReceivedUnexpectedly,
+            -10003 => NetError::CookieInvalidPrefix,
+            -10004 => NetError::CookiePublicSuffix,
+            -10005 => NetError::InvalidHeader,
+            -10006 => NetError::HttpBodyError,
+            -10007 => NetError::InvalidUtf8,
+            -10008 => NetError::JsonParseError,
+            -10009 => NetError::CertPinningFailed,
+            -10010 => NetError::NotImplemented,
+            -10011 => NetError::FileNotFound,
             _ => NetError::Unknown(code),
         }
     }

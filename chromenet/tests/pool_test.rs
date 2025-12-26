@@ -25,8 +25,8 @@ async fn test_pool_limits() {
     for _ in 0..6 {
         let socket_res = pool.request_socket(&url, None).await;
         assert!(socket_res.is_ok(), "Failed to acquire socket within limit");
-        let (socket, _reused) = socket_res.unwrap();
-        sockets.push(socket);
+        let result = socket_res.unwrap();
+        sockets.push(result.socket);
     }
 
     // 3. Request 7th - Should Fail
@@ -36,7 +36,7 @@ async fn test_pool_limits() {
 
     // 4. Release one
     let socket = sockets.pop().unwrap();
-    pool.release_socket(&url, socket);
+    pool.release_socket(&url, socket, false);
 
     // 5. Request again - Should Succeed (Reuse)
     let result = pool.request_socket(&url, None).await;

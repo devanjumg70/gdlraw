@@ -3,6 +3,7 @@ use chromenet::cookies::monster::CookieMonster;
 use chromenet::http::streamfactory::HttpStreamFactory;
 use chromenet::http::transaction::HttpNetworkTransaction;
 use chromenet::socket::pool::ClientSocketPool;
+use chromenet::socket::stream::BoxedSocket;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -85,7 +86,7 @@ async fn test_retry_on_reused_socket_failure() {
     use chromenet::socket::client::SocketType;
 
     let socket_wrapper = SocketType::Tcp(stream);
-    pool.release_socket(&server_url, socket_wrapper);
+    pool.release_socket(&server_url, BoxedSocket::new(socket_wrapper), false);
 
     // Now pool has a "Idle" socket.
     // Server has closed its end (after accept logic 1 spawning).
