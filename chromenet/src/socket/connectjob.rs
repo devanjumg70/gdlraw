@@ -1,3 +1,4 @@
+use crate::base::context::IoResultExt;
 use crate::base::neterror::NetError;
 use crate::socket::stream::{BoxedSocket, StreamSocket};
 use crate::socket::tls::TlsConfig;
@@ -179,11 +180,17 @@ impl ConnectJob {
         let addr_str = format!("{}:{}", host, port);
         let addrs: Vec<SocketAddr> = tokio::net::lookup_host(&addr_str)
             .await
-            .map_err(|_| NetError::NameNotResolved)?
+            .dns_context(host)?
             .collect();
 
         if addrs.is_empty() {
-            return Err(NetError::NameNotResolved);
+            return Err(NetError::NameNotResolvedFor {
+                domain: host.to_string(),
+                source: std::sync::Arc::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "No addresses returned",
+                )),
+            });
         }
 
         Self::connect_with_happy_eyeballs(&addrs).await
