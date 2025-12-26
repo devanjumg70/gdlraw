@@ -1,3 +1,4 @@
+use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
 use crate::cookies::monster::CookieMonster;
 use crate::http::streamfactory::HttpStreamFactory;
@@ -106,5 +107,15 @@ impl URLRequest {
         let mut req = Self::new(url_str)?;
         req.set_method(http::Method::PUT);
         Ok(req)
+    }
+
+    /// Get the current load state for progress reporting.
+    ///
+    /// Returns the granular state of the request (e.g., "Resolving Host", "Connecting").
+    /// Useful for UI progress indicators.
+    ///
+    /// Chromium: net/url_request/url_request.h::GetLoadState()
+    pub fn load_state(&self) -> LoadState {
+        self.job.load_state()
     }
 }

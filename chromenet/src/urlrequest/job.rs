@@ -1,3 +1,4 @@
+use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
 use crate::http::streamfactory::HttpStreamFactory;
 use crate::http::transaction::HttpNetworkTransaction;
@@ -200,6 +201,15 @@ impl URLRequestHttpJob {
             .push((key.to_string(), value.to_string()));
         // Best-effort: ignore errors for already-added headers
         let _ = self.transaction.add_header(key, value);
+    }
+
+    /// Get the current load state of the job.
+    ///
+    /// Returns the internal transaction's load state for progress reporting.
+    ///
+    /// Chromium: net/url_request/url_request_http_job.cc
+    pub fn load_state(&self) -> LoadState {
+        self.transaction.get_load_state()
     }
 }
 

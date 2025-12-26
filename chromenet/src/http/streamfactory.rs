@@ -66,10 +66,7 @@ impl H2SessionCache {
 
     /// Get session key from URL
     fn key(url: &Url) -> Option<(String, u16)> {
-        Some((
-            url.host_str()?.to_string(),
-            url.port_or_known_default()?,
-        ))
+        Some((url.host_str()?.to_string(), url.port_or_known_default()?))
     }
 
     /// Get an existing H2 sender if available and ready

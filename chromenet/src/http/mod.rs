@@ -1,3 +1,4 @@
+pub mod digestauth;
 pub mod h2settings;
 pub mod orderedheaders;
 pub mod requestbody;

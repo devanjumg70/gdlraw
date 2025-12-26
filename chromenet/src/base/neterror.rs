@@ -181,6 +181,8 @@ pub enum NetError {
     JsonParseError,
     #[error("Certificate pinning validation failed")]
     CertPinningFailed,
+    #[error("Certificate transparency required but SCTs missing/invalid")]
+    CertificateTransparencyRequired,
     #[error("Feature not implemented")]
     NotImplemented,
     #[error("File not found")]
@@ -439,8 +441,9 @@ impl NetError {
             NetError::InvalidUtf8 => -10007,
             NetError::JsonParseError => -10008,
             NetError::CertPinningFailed => -10009,
-            NetError::NotImplemented => -10010,
-            NetError::FileNotFound => -10011,
+            NetError::CertificateTransparencyRequired => -10010,
+            NetError::NotImplemented => -10011,
+            NetError::FileNotFound => -10012,
             NetError::Unknown(code) => *code,
         }
     }

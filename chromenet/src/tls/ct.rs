@@ -1,9 +1,10 @@
-//! Certificate Transparency (CT) verification.
+//! Certificate Transparency (CT) types and verification.
 //!
 //! Validates Signed Certificate Timestamps (SCTs) to ensure certificates
 //! were logged to public CT logs. Based on Chromium's net/cert/ct_verifier.h.
+//!
+//! For the full multi-log verifier implementation, see [`ctverifier`](super::ctverifier).
 
-use crate::base::neterror::NetError;
 use time::OffsetDateTime;
 
 /// Signed Certificate Timestamp from a CT log.
@@ -31,106 +32,45 @@ pub enum SctStatus {
 }
 
 /// CT verification requirements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CtRequirement {
     /// CT not required (HTTP connections)
     NotRequired,
     /// CT required but may be missing (warning)
+    #[default]
     SoftFail,
     /// CT required (connection fails without valid SCTs)
     Required,
 }
 
-/// Certificate Transparency verifier.
+/// Alias for backward compatibility.
 ///
-/// NOTE: This is a stub implementation. Full CT verification requires:
-/// - Log public keys for signature verification
-/// - Log inclusion proof verification
-/// - SCT parsing from TLS extensions or OCSP responses
-///
-/// Chromium: net/cert/ct_verifier.h
-pub struct CtVerifier {
-    requirement: CtRequirement,
-}
-
-impl Default for CtVerifier {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CtVerifier {
-    /// Create a new CT verifier with soft-fail requirement.
-    pub fn new() -> Self {
-        Self {
-            requirement: CtRequirement::SoftFail,
-        }
-    }
-
-    /// Set the CT requirement level.
-    pub fn with_requirement(mut self, requirement: CtRequirement) -> Self {
-        self.requirement = requirement;
-        self
-    }
-
-    /// Check if CT verification is required.
-    pub fn is_required(&self) -> bool {
-        self.requirement != CtRequirement::NotRequired
-    }
-
-    /// Verify SCTs for a certificate chain.
-    ///
-    /// Returns Ok if CT requirements are met or not required.
-    /// Returns Err if required SCTs are missing/invalid.
-    pub fn verify(&self, _cert_chain: &[&[u8]], scts: &[Sct]) -> Result<(), NetError> {
-        match self.requirement {
-            CtRequirement::NotRequired => Ok(()),
-            CtRequirement::SoftFail => {
-                // Log warning if no SCTs, but allow connection
-                if scts.is_empty() {
-                    // In real implementation: log warning
-                }
-                Ok(())
-            }
-            CtRequirement::Required => {
-                if scts.is_empty() {
-                    Err(NetError::NotImplemented)
-                } else {
-                    // Stub: accept any SCTs for now
-                    Ok(())
-                }
-            }
-        }
-    }
-}
+/// Use [`MultiLogCtVerifier`](super::ctverifier::MultiLogCtVerifier) for full functionality.
+#[deprecated(since = "0.2.0", note = "Use MultiLogCtVerifier instead")]
+pub type CtVerifier = super::ctverifier::MultiLogCtVerifier;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_ct_not_required() {
-        let verifier = CtVerifier::new().with_requirement(CtRequirement::NotRequired);
-        assert!(!verifier.is_required());
-        assert!(verifier.verify(&[], &[]).is_ok());
+    fn test_sct_creation() {
+        let sct = Sct {
+            log_id: [0u8; 32],
+            timestamp: OffsetDateTime::now_utc(),
+            signature: vec![0x01, 0x02, 0x03],
+        };
+        assert_eq!(sct.log_id.len(), 32);
     }
 
     #[test]
-    fn test_ct_soft_fail() {
-        let verifier = CtVerifier::new().with_requirement(CtRequirement::SoftFail);
-        assert!(verifier.is_required());
-        assert!(verifier.verify(&[], &[]).is_ok());
+    fn test_sct_status_eq() {
+        assert_eq!(SctStatus::Valid, SctStatus::Valid);
+        assert_ne!(SctStatus::Valid, SctStatus::UnknownLog);
     }
 
     #[test]
-    fn test_ct_required_no_scts() {
-        let verifier = CtVerifier::new().with_requirement(CtRequirement::Required);
-        assert!(verifier.verify(&[], &[]).is_err());
-    }
-
-    #[test]
-    fn test_default_verifier() {
-        let verifier = CtVerifier::default();
-        assert!(verifier.is_required());
+    fn test_ct_requirement_default() {
+        assert_eq!(CtRequirement::default(), CtRequirement::SoftFail);
     }
 }
