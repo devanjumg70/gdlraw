@@ -132,15 +132,37 @@ pub fn encryption_version(data: &[u8]) -> Option<u8> {
     }
 }
 
-/// Attempt to decrypt any Chrome-encrypted value (Linux v10 only).
+/// Attempt to decrypt any Chrome-encrypted value.
 ///
-/// For v11 (keyring) or other platforms, use `decrypt_with_key`.
+/// For v10, uses the hardcoded "peanuts" key.
+/// For v11, attempts to access the system keyring (Linux only).
 pub fn decrypt(encrypted: &[u8]) -> Result<String, NetError> {
+    decrypt_for_browser(encrypted, "chrome")
+}
+
+/// Decrypt with browser-specific keyring lookup.
+pub fn decrypt_for_browser(encrypted: &[u8], browser: &str) -> Result<String, NetError> {
     if encrypted.starts_with(V10_PREFIX) {
         decrypt_v10(encrypted).ok_or(NetError::InvalidResponse)
     } else if encrypted.starts_with(V11_PREFIX) {
-        // v11 requires keyring access - not yet implemented
-        Err(NetError::NotImplemented)
+        // v11 requires keyring access
+        #[cfg(target_os = "linux")]
+        {
+            use super::decrypt::linux;
+            let application = linux::browser_to_application(browser);
+            match super::decrypt::get_chrome_key(application) {
+                Ok(Some(key)) => {
+                    decrypt_v10_with_key(encrypted, &key).ok_or(NetError::InvalidResponse)
+                }
+                Ok(None) => Err(NetError::FileNotFound), // No key in keyring
+                Err(_) => Err(NetError::NotImplemented), // Keyring unavailable
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = browser;
+            Err(NetError::NotImplemented)
+        }
     } else if encrypted.is_empty() {
         Ok(String::new())
     } else {
@@ -151,13 +173,38 @@ pub fn decrypt(encrypted: &[u8]) -> Result<String, NetError> {
 
 /// Attempt to decrypt with better error handling.
 pub fn decrypt_cookie(encrypted: &[u8]) -> Result<String, CookieExtractionError> {
+    decrypt_cookie_for_browser(encrypted, "chrome")
+}
+
+/// Decrypt cookie with browser-specific keyring lookup.
+pub fn decrypt_cookie_for_browser(
+    encrypted: &[u8],
+    browser: &str,
+) -> Result<String, CookieExtractionError> {
     if encrypted.starts_with(V10_PREFIX) {
         decrypt_v10(encrypted)
             .ok_or_else(|| CookieExtractionError::DecryptionFailed("v10 decryption failed".into()))
     } else if encrypted.starts_with(V11_PREFIX) {
-        Err(CookieExtractionError::DecryptionFailed(
-            "v11 requires keyring access (not yet implemented)".into(),
-        ))
+        // v11 requires keyring access
+        #[cfg(target_os = "linux")]
+        {
+            use super::decrypt::linux;
+            let application = linux::browser_to_application(browser);
+            match super::decrypt::get_chrome_key(application) {
+                Ok(Some(key)) => decrypt_v10_with_key(encrypted, &key).ok_or_else(|| {
+                    CookieExtractionError::DecryptionFailed("v11 decryption failed".into())
+                }),
+                Ok(None) => Err(CookieExtractionError::KeyringUnavailable),
+                Err(e) => Err(e),
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = browser;
+            Err(CookieExtractionError::PlatformNotSupported(
+                "v11 keyring not available on this platform".into(),
+            ))
+        }
     } else if encrypted.is_empty() {
         Ok(String::new())
     } else {
@@ -219,9 +266,11 @@ mod tests {
     }
 
     #[test]
-    fn test_decrypt_v11_not_implemented() {
+    fn test_decrypt_v11_attempts_keyring() {
+        // v11 now attempts keyring access (may fail if no keyring available)
         let result = decrypt(b"v11someciphertext");
-        assert!(matches!(result, Err(NetError::NotImplemented)));
+        // Should return an error (keyring unavailable or decryption failed)
+        assert!(result.is_err());
     }
 
     #[test]
