@@ -55,12 +55,16 @@ pub fn get_v11_key(application: &str) -> Result<Option<[u8; 16]>, CookieExtracti
     }
 
     // Get the secret (password)
-    let secret = item
+    let mut secret = item
         .get_secret()
         .map_err(|_| CookieExtractionError::KeyringUnavailable)?;
 
     // Derive the AES key using PBKDF2 (1 iteration for Linux)
     let key = super::derive_key(&secret, 1);
+
+    // Zeroize the secret immediately after use
+    use zeroize::Zeroize;
+    secret.zeroize();
 
     Ok(Some(key))
 }

@@ -73,7 +73,7 @@
 //! - Cookie monster: `net/cookies/cookie_monster.cc`
 
 pub mod browser;
-pub mod canonical_cookie;
+pub mod canonicalcookie;
 pub mod chromedb;
 pub mod decrypt;
 pub mod error;

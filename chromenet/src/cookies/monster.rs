@@ -1,4 +1,4 @@
-use crate::cookies::canonical_cookie::CanonicalCookie;
+use crate::cookies::canonicalcookie::CanonicalCookie;
 use dashmap::DashMap;
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -7,7 +7,8 @@ use url::Url;
 /// Maximum cookies per domain (Chromium default).
 const MAX_COOKIES_PER_DOMAIN: usize = 50;
 
-/// Maximum total cookies (Chromium default is higher, we use 3000).
+/// Maximum total cookies (Current Chromenet limit: 3000).
+/// Chromium uses 3300, but we use a slightly lower limit to keep memory usage predictable.
 #[allow(dead_code)]
 const MAX_COOKIES_TOTAL: usize = 3000;
 
@@ -204,7 +205,7 @@ impl CookieMonster {
     }
 
     pub fn parse_and_save_cookie(&self, url: &Url, cookie_line: &str) {
-        use crate::cookies::canonical_cookie::{CookiePriority, SameSite};
+        use crate::cookies::canonicalcookie::{CookiePriority, SameSite};
         use cookie::Cookie;
 
         if let Ok(parsed) = Cookie::parse(cookie_line) {
@@ -406,7 +407,7 @@ impl CookieMonster {
     /// println!("Imported {} cookies", count);
     /// ```
     pub fn import_netscape(&self, content: &str) -> usize {
-        use crate::cookies::canonical_cookie::{CookiePriority, SameSite};
+        use crate::cookies::canonicalcookie::{CookiePriority, SameSite};
         use time::OffsetDateTime;
 
         let mut count = 0;
@@ -465,7 +466,7 @@ impl CookieMonster {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cookies::canonical_cookie::{CookiePriority, SameSite};
+    use crate::cookies::canonicalcookie::{CookiePriority, SameSite};
 
     fn make_test_cookie(name: &str, domain: &str) -> CanonicalCookie {
         CanonicalCookie {

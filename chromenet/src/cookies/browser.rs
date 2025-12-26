@@ -10,7 +10,7 @@
 //! - **Windows**: Requires DPAPI (not yet implemented)
 
 use crate::base::neterror::NetError;
-use crate::cookies::canonical_cookie::{CanonicalCookie, CookiePriority, SameSite};
+use crate::cookies::canonicalcookie::{CanonicalCookie, CookiePriority, SameSite};
 use crate::cookies::error::{CookieExtractionError, CookieResult};
 use crate::cookies::oscrypt;
 use std::path::PathBuf;
@@ -441,6 +441,8 @@ impl BrowserCookieReader {
 
         let mut rows = stmt.query([]).map_err(|_| NetError::InvalidResponse)?;
 
+        // TODO(performance): accessing all rows loads all cookies into memory.
+        // Consider returning an iterator or streaming the results for large databases.
         while let Some(row) = rows.next().map_err(|_| NetError::InvalidResponse)? {
             let host_key: String = row.get(0).unwrap_or_default();
             let name: String = row.get(1).unwrap_or_default();

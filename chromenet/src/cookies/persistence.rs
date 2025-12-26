@@ -60,7 +60,7 @@ pub fn save_cookies(monster: &CookieMonster, path: &Path) -> io::Result<()> {
 /// let monster = persistence::load_cookies("/path/to/cookies.json")?;
 /// ```
 pub fn load_cookies(path: &Path) -> io::Result<CookieMonster> {
-    use crate::cookies::canonical_cookie::{CanonicalCookie, CookiePriority, SameSite};
+    use crate::cookies::canonicalcookie::{CanonicalCookie, CookiePriority, SameSite};
     use time::OffsetDateTime;
 
     let json = fs::read_to_string(path)?;
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_save_load_roundtrip() {
-        use crate::cookies::canonical_cookie::{CanonicalCookie, CookiePriority, SameSite};
+        use crate::cookies::canonicalcookie::{CanonicalCookie, CookiePriority, SameSite};
         use time::OffsetDateTime;
 
         let monster = CookieMonster::new();

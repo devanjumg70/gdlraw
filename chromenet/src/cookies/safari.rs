@@ -13,7 +13,7 @@
 //! - https://github.com/libyal/dtformats/blob/main/documentation/Safari%20Cookies.asciidoc
 //! - https://github.com/als0052/BinaryCookieReader
 
-use crate::cookies::canonical_cookie::{CanonicalCookie, CookiePriority, SameSite};
+use crate::cookies::canonicalcookie::{CanonicalCookie, CookiePriority, SameSite};
 use crate::cookies::error::CookieExtractionError;
 use std::io::{Cursor, Read};
 use time::OffsetDateTime;
