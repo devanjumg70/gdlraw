@@ -53,3 +53,50 @@ We implement logic by mirroring Chromium's classes, not by "inventing" new Rust 
 *   **Testing**:
     *   Unit tests for logic (pools, transaction states).
     *   Integration tests (`tests/`) for real network I/O.
+
+## 5. Cookie Extraction
+
+The `cookies` module provides browser cookie extraction matching Chromium's implementation.
+
+### Chromium Mapping
+
+| Chromium (C++) | Rust (`chromenet`) | File |
+| :--- | :--- | :--- |
+| `net::CookieMonster` | `CookieMonster` | `cookies/monster.rs` |
+| `net::CanonicalCookie` | `CanonicalCookie` | `cookies/canonical_cookie.rs` |
+| `os_crypt::OSCrypt` | `oscrypt` | `cookies/oscrypt.rs` |
+| `SqlitePersistentCookieStore` | `persistence` | `cookies/persistence.rs` |
+| `KeyStorageLibsecret` | `decrypt/linux.rs` | `cookies/decrypt/linux.rs` |
+
+### Supported Browsers
+
+*   **Chrome/Chromium**: v10 (hardcoded key), v11 (GNOME Keyring)
+*   **Firefox**: Plaintext cookies.sqlite
+*   **Safari**: Binary cookies (macOS only)
+*   **Edge/Brave/Opera**: Same as Chrome
+
+### Platform Encryption
+
+| Platform | Method | Key Source |
+| :--- | :--- | :--- |
+| Linux v10 | AES-128-CBC | `"peanuts"` + PBKDF2 (1 iter) |
+| Linux v11 | AES-128-CBC | GNOME Keyring + PBKDF2 (1 iter) |
+| macOS | AES-128-CBC | Keychain + PBKDF2 (1003 iter) |
+| Windows | AES-256-GCM | DPAPI |
+
+### Usage Example
+
+```rust
+use chromenet::cookies::monster::CookieMonster;
+use chromenet::cookies::browser::Browser;
+
+let jar = CookieMonster::new();
+
+// Import cookies from Chrome
+jar.import_from_browser(Browser::Chrome, None)?;
+
+// Export to Netscape format (for curl/wget)
+let netscape = jar.export_netscape(None);
+std::fs::write("cookies.txt", netscape)?;
+```
+
