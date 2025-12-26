@@ -225,6 +225,154 @@ impl BrowserCookieReader {
         }
     }
 
+    /// List available profiles for this browser.
+    ///
+    /// Returns a list of profile names that can be passed to `with_profile()`.
+    pub fn list_profiles(&self) -> Vec<String> {
+        match self.browser {
+            Browser::Chrome
+            | Browser::Chromium
+            | Browser::Edge
+            | Browser::Brave
+            | Browser::Opera => self.list_chromium_profiles(),
+            Browser::Firefox => self.list_firefox_profiles(),
+            Browser::Safari => vec![], // Safari doesn't have profiles
+        }
+    }
+
+    fn list_chromium_profiles(&self) -> Vec<String> {
+        let user_data_dir = self.get_chromium_user_data_dir();
+        let Some(dir) = user_data_dir else {
+            return vec![];
+        };
+
+        let mut profiles = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    // Profile dirs are "Default", "Profile 1", "Profile 2", etc.
+                    if name == "Default" || name.starts_with("Profile ") {
+                        // Check if Cookies file exists
+                        let cookies_path = entry.path().join("Cookies");
+                        let network_cookies = entry.path().join("Network").join("Cookies");
+                        if cookies_path.exists() || network_cookies.exists() {
+                            profiles.push(name);
+                        }
+                    }
+                }
+            }
+        }
+        profiles.sort();
+        profiles
+    }
+
+    fn get_chromium_user_data_dir(&self) -> Option<PathBuf> {
+        #[cfg(target_os = "linux")]
+        {
+            let home = std::env::var("HOME").ok()?;
+            let browser_dir = match self.browser {
+                Browser::Chrome => "google-chrome",
+                Browser::Chromium => "chromium",
+                Browser::Edge => "microsoft-edge",
+                Browser::Brave => "BraveSoftware/Brave-Browser",
+                Browser::Opera => "opera",
+                _ => return None,
+            };
+            Some(PathBuf::from(format!("{}/.config/{}", home, browser_dir)))
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let home = std::env::var("HOME").ok()?;
+            let browser_dir = match self.browser {
+                Browser::Chrome => "Google/Chrome",
+                Browser::Chromium => "Chromium",
+                Browser::Edge => "Microsoft/Edge",
+                Browser::Brave => "BraveSoftware/Brave-Browser",
+                Browser::Opera => "com.operasoftware.Opera",
+                _ => return None,
+            };
+            Some(PathBuf::from(format!(
+                "{}/Library/Application Support/{}",
+                home, browser_dir
+            )))
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let local_app_data = std::env::var("LOCALAPPDATA").ok()?;
+            let browser_dir = match self.browser {
+                Browser::Chrome => "Google/Chrome/User Data",
+                Browser::Chromium => "Chromium/User Data",
+                Browser::Edge => "Microsoft/Edge/User Data",
+                Browser::Brave => "BraveSoftware/Brave-Browser/User Data",
+                Browser::Opera => "Opera Software/Opera Stable",
+                _ => return None,
+            };
+            Some(PathBuf::from(format!("{}/{}", local_app_data, browser_dir)))
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            None
+        }
+    }
+
+    fn list_firefox_profiles(&self) -> Vec<String> {
+        let firefox_dir = self.get_firefox_profiles_dir();
+        let Some(dir) = firefox_dir else {
+            return vec![];
+        };
+
+        let mut profiles = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    // Firefox profile dirs have format: "xxxxxxxx.ProfileName"
+                    let cookies_path = entry.path().join("cookies.sqlite");
+                    if cookies_path.exists() {
+                        profiles.push(name);
+                    }
+                }
+            }
+        }
+        profiles.sort();
+        profiles
+    }
+
+    fn get_firefox_profiles_dir(&self) -> Option<PathBuf> {
+        #[cfg(target_os = "linux")]
+        {
+            let home = std::env::var("HOME").ok()?;
+            Some(PathBuf::from(format!("{}/.mozilla/firefox", home)))
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let home = std::env::var("HOME").ok()?;
+            Some(PathBuf::from(format!(
+                "{}/Library/Application Support/Firefox/Profiles",
+                home
+            )))
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let app_data = std::env::var("APPDATA").ok()?;
+            Some(PathBuf::from(format!(
+                "{}/Mozilla/Firefox/Profiles",
+                app_data
+            )))
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            None
+        }
+    }
+
     /// Read all cookies from the browser database.
     pub fn read_cookies(&self) -> Result<Vec<CanonicalCookie>, NetError> {
         let db_path = self.get_db_path().ok_or(NetError::FileNotFound)?;
@@ -619,5 +767,30 @@ mod tests {
     fn test_samesite_conversion() {
         assert_eq!(chrome_samesite(1), SameSite::Lax);
         assert_eq!(firefox_samesite(2), SameSite::Strict);
+    }
+
+    #[test]
+    fn test_list_profiles_safari() {
+        // Safari doesn't have profiles
+        let reader = BrowserCookieReader::new(Browser::Safari);
+        let profiles = reader.list_profiles();
+        assert!(profiles.is_empty());
+    }
+
+    #[test]
+    fn test_list_profiles_returns_vec() {
+        // Just verify the method doesn't panic
+        let reader = BrowserCookieReader::new(Browser::Chrome);
+        let profiles = reader.list_profiles();
+        // May or may not have profiles, just verify it's a Vec
+        assert!(profiles.len() >= 0);
+    }
+
+    #[test]
+    fn test_all_chromium_browsers() {
+        let browsers = Browser::all_chromium();
+        assert!(browsers.contains(&Browser::Chrome));
+        assert!(browsers.contains(&Browser::Edge));
+        assert!(!browsers.contains(&Browser::Firefox));
     }
 }
