@@ -102,6 +102,8 @@ impl HstsStore {
     }
 
     /// Check if a host should be upgraded to HTTPS.
+    ///
+    /// Chromium: net/http/transport_security_state.cc
     pub fn should_upgrade(&self, host: &str) -> bool {
         let host_lower = host.to_lowercase();
 
@@ -113,10 +115,14 @@ impl HstsStore {
         }
 
         // Check parent domains for include_subdomains
-        let parts: Vec<&str> = host_lower.split('.').collect();
-        for i in 1..parts.len() {
-            let parent = parts[i..].join(".");
-            if let Some(entry) = self.entries.get(&parent) {
+        // Optimization: Zero-allocation iteration over parent domains
+        let mut current = host_lower.as_str();
+        while let Some(idx) = current.find('.') {
+            if idx + 1 >= current.len() {
+                break;
+            }
+            current = &current[idx + 1..];
+            if let Some(entry) = self.entries.get(current) {
                 if !entry.is_expired() && entry.include_subdomains {
                     return true;
                 }

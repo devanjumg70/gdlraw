@@ -47,6 +47,8 @@ pub enum CtRequirement {
 /// - Log public keys for signature verification
 /// - Log inclusion proof verification
 /// - SCT parsing from TLS extensions or OCSP responses
+///
+/// Chromium: net/cert/ct_verifier.h
 pub struct CtVerifier {
     requirement: CtRequirement,
 }

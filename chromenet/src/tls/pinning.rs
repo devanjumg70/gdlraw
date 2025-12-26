@@ -124,6 +124,8 @@ impl PinStore {
     /// Check if the connection to `host` with given certificate hashes is allowed.
     /// Returns Ok(()) if pins match or no pins exist for this domain.
     /// Returns Err(CertPinningFailed) if pins exist but don't match.
+    ///
+    /// Chromium: net/http/transport_security_state.cc
     pub fn check(&self, host: &str, cert_hashes: &[SpkiHash]) -> Result<(), NetError> {
         let host_lower = host.to_lowercase();
 
@@ -133,10 +135,14 @@ impl PinStore {
         }
 
         // Check parent domains for wildcard pins
-        let parts: Vec<&str> = host_lower.split('.').collect();
-        for i in 1..parts.len() {
-            let parent = parts[i..].join(".");
-            if let Some(pin_set) = self.pins.get(&parent) {
+        // Optimization: Zero-allocation iteration over parent domains
+        let mut current = host_lower.as_str();
+        while let Some(idx) = current.find('.') {
+            if idx + 1 >= current.len() {
+                break;
+            }
+            current = &current[idx + 1..];
+            if let Some(pin_set) = self.pins.get(current) {
                 if pin_set.include_subdomains {
                     return self.verify_pins(&pin_set, cert_hashes);
                 }
