@@ -52,6 +52,7 @@
 
 pub mod base;
 pub mod cookies;
+pub mod dns;
 pub mod http;
 pub mod socket;
 pub mod tls;

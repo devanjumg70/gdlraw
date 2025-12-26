@@ -36,6 +36,10 @@ psl = "2"
 rusqlite = { version = "0.31", features = ["bundled"] }
 zeroize = "1.7"
 
+# DNS Resolution (Async with DoH/DoT support)
+hickory-resolver = "0.25"
+
+
 # Platform-specific dependencies for cookie decryption
 [target.'cfg(target_os = "linux")'.dependencies]
 secret-service = { version = "4.0", features = ["rt-tokio-crypto-rust"] }

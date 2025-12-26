@@ -1,9 +1,11 @@
 use crate::base::context::IoResultExt;
 use crate::base::neterror::NetError;
+use crate::dns::{Name, Resolve, HickoryResolver};
 use crate::socket::stream::{BoxedSocket, StreamSocket};
-use crate::socket::tls::TlsConfig;
+use crate::socket::tls::{TlsConfig, TlsOptions};
 use boring::ssl::{SslConnector, SslMethod};
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -35,31 +37,57 @@ pub struct ConnectJob;
 impl ConnectJob {
     /// Connect to the target URL, optionally through a proxy.
     /// Returns a BoxedSocket for polymorphic handling (supports TLS-in-TLS).
+    ///
+    /// Uses the default HickoryResolver for DNS resolution.
     pub async fn connect(
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
+        tls_options: Option<&TlsOptions>,
+    ) -> Result<ConnectResult, NetError> {
+        let resolver = Arc::new(HickoryResolver::new());
+        Self::connect_with_resolver(url, proxy, tls_options, &resolver).await
+    }
+
+    /// Connect to the target URL with a custom DNS resolver.
+    ///
+    /// This is the primary connection method that accepts a pluggable resolver.
+    pub async fn connect_with_resolver(
+        url: &Url,
+        proxy: Option<&crate::socket::proxy::ProxySettings>,
+        tls_options: Option<&TlsOptions>,
+        resolver: &dyn Resolve,
     ) -> Result<ConnectResult, NetError> {
         match proxy {
             Some(p) => match p.proxy_type() {
-                crate::socket::proxy::ProxyType::Http => Self::http_proxy_connect(url, p).await,
-                crate::socket::proxy::ProxyType::Https => Self::https_proxy_connect(url, p).await,
-                crate::socket::proxy::ProxyType::Socks5 => Self::socks5_proxy_connect(url, p).await,
+                crate::socket::proxy::ProxyType::Http => {
+                    Self::http_proxy_connect(url, p, tls_options, resolver).await
+                }
+                crate::socket::proxy::ProxyType::Https => {
+                    Self::https_proxy_connect(url, p, tls_options, resolver).await
+                }
+                crate::socket::proxy::ProxyType::Socks5 => {
+                    Self::socks5_proxy_connect(url, p, tls_options, resolver).await
+                }
             },
-            None => Self::direct_connect(url).await,
+            None => Self::direct_connect(url, tls_options, resolver).await,
         }
     }
 
     /// Direct connection (no proxy).
-    async fn direct_connect(url: &Url) -> Result<ConnectResult, NetError> {
+    async fn direct_connect(
+        url: &Url,
+        tls_options: Option<&TlsOptions>,
+        resolver: &dyn Resolve,
+    ) -> Result<ConnectResult, NetError> {
         let host = url.host_str().ok_or(NetError::InvalidUrl)?;
         let port = url.port_or_known_default().ok_or(NetError::InvalidUrl)?;
 
         // TCP connect with Happy Eyeballs
-        let tcp = Self::connect_tcp(host, port).await?;
+        let tcp = Self::connect_tcp(host, port, resolver).await?;
 
         // TLS if HTTPS
         if url.scheme() == "https" {
-            let (tls, is_h2) = Self::ssl_handshake(tcp, host).await?;
+            let (tls, is_h2) = Self::ssl_handshake(tcp, host, tls_options).await?;
             Ok(ConnectResult {
                 socket: BoxedSocket::new(tls),
                 is_h2,
@@ -76,6 +104,8 @@ impl ConnectJob {
     async fn http_proxy_connect(
         url: &Url,
         proxy: &crate::socket::proxy::ProxySettings,
+        tls_options: Option<&TlsOptions>,
+        resolver: &dyn Resolve,
     ) -> Result<ConnectResult, NetError> {
         let proxy_host = proxy.url.host_str().ok_or(NetError::InvalidUrl)?;
         let proxy_port = proxy
@@ -84,7 +114,7 @@ impl ConnectJob {
             .ok_or(NetError::InvalidUrl)?;
 
         // Step 1: TCP to proxy
-        let mut tcp = Self::connect_tcp(proxy_host, proxy_port).await?;
+        let mut tcp = Self::connect_tcp(proxy_host, proxy_port, resolver).await?;
 
         // Step 2: HTTP CONNECT tunnel
         Self::send_connect(&mut tcp, url, proxy).await?;
@@ -92,7 +122,7 @@ impl ConnectJob {
         // Step 3: TLS to target if HTTPS
         if url.scheme() == "https" {
             let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
-            let (tls, is_h2) = Self::ssl_handshake(tcp, target_host).await?;
+            let (tls, is_h2) = Self::ssl_handshake(tcp, target_host, tls_options).await?;
             Ok(ConnectResult {
                 socket: BoxedSocket::new(tls),
                 is_h2,
@@ -110,6 +140,8 @@ impl ConnectJob {
     async fn https_proxy_connect(
         url: &Url,
         proxy: &crate::socket::proxy::ProxySettings,
+        tls_options: Option<&TlsOptions>,
+        resolver: &dyn Resolve,
     ) -> Result<ConnectResult, NetError> {
         let proxy_host = proxy.url.host_str().ok_or(NetError::InvalidUrl)?;
         let proxy_port = proxy
@@ -118,10 +150,10 @@ impl ConnectJob {
             .ok_or(NetError::InvalidUrl)?;
 
         // Step 1: TCP to proxy
-        let tcp = Self::connect_tcp(proxy_host, proxy_port).await?;
+        let tcp = Self::connect_tcp(proxy_host, proxy_port, resolver).await?;
 
         // Step 2: TLS to proxy (Layer 1)
-        let (mut proxy_tls, _) = Self::ssl_handshake(tcp, proxy_host).await?;
+        let (mut proxy_tls, _) = Self::ssl_handshake(tcp, proxy_host, tls_options).await?;
 
         // Step 3: HTTP CONNECT through TLS tunnel
         Self::send_connect_generic(&mut proxy_tls, url, proxy).await?;
@@ -129,7 +161,8 @@ impl ConnectJob {
         // Step 4: TLS to target through tunnel (Layer 2 - TLS-in-TLS)
         if url.scheme() == "https" {
             let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
-            let (target_tls, is_h2) = Self::ssl_handshake_generic(proxy_tls, target_host).await?;
+            let (target_tls, is_h2) =
+                Self::ssl_handshake_generic(proxy_tls, target_host, tls_options).await?;
             Ok(ConnectResult {
                 socket: BoxedSocket::new(target_tls),
                 is_h2,
@@ -146,6 +179,8 @@ impl ConnectJob {
     async fn socks5_proxy_connect(
         url: &Url,
         proxy: &crate::socket::proxy::ProxySettings,
+        tls_options: Option<&TlsOptions>,
+        resolver: &dyn Resolve,
     ) -> Result<ConnectResult, NetError> {
         let proxy_host = proxy.url.host_str().ok_or(NetError::InvalidUrl)?;
         let proxy_port = proxy
@@ -154,7 +189,7 @@ impl ConnectJob {
             .ok_or(NetError::InvalidUrl)?;
 
         // Step 1: TCP to proxy
-        let mut tcp = Self::connect_tcp(proxy_host, proxy_port).await?;
+        let mut tcp = Self::connect_tcp(proxy_host, proxy_port, resolver).await?;
 
         // Step 2: SOCKS5 handshake
         Self::socks5_handshake(&mut tcp, url).await?;
@@ -162,7 +197,7 @@ impl ConnectJob {
         // Step 3: TLS to target if HTTPS
         if url.scheme() == "https" {
             let target_host = url.host_str().ok_or(NetError::InvalidUrl)?;
-            let (tls, is_h2) = Self::ssl_handshake(tcp, target_host).await?;
+            let (tls, is_h2) = Self::ssl_handshake(tcp, target_host, tls_options).await?;
             Ok(ConnectResult {
                 socket: BoxedSocket::new(tls),
                 is_h2,
@@ -176,11 +211,24 @@ impl ConnectJob {
     }
 
     /// TCP connect with Happy Eyeballs (RFC 8305).
-    async fn connect_tcp(host: &str, port: u16) -> Result<TcpStream, NetError> {
-        let addr_str = format!("{}:{}", host, port);
-        let addrs: Vec<SocketAddr> = tokio::net::lookup_host(&addr_str)
-            .await
-            .dns_context(host)?
+    ///
+    /// Uses the provided DNS resolver to look up addresses, then attempts
+    /// connections with IPv6 preference and fallback.
+    async fn connect_tcp(
+        host: &str,
+        port: u16,
+        resolver: &dyn Resolve,
+    ) -> Result<TcpStream, NetError> {
+        // Resolve hostname to addresses
+        let name = Name::new(host);
+        let resolved = resolver.resolve(name).await?;
+
+        // Collect addresses and set the port
+        let addrs: Vec<SocketAddr> = resolved
+            .map(|mut addr| {
+                addr.set_port(port);
+                addr
+            })
             .collect();
 
         if addrs.is_empty() {
@@ -240,6 +288,7 @@ impl ConnectJob {
     async fn ssl_handshake(
         stream: TcpStream,
         host: &str,
+        tls_options: Option<&TlsOptions>,
     ) -> Result<(SslStream<TcpStream>, bool), NetError> {
         let mut builder =
             SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
@@ -250,8 +299,12 @@ impl ConnectJob {
             .map_err(|_| NetError::SslProtocolError)?;
 
         // Apply Chrome TLS settings
-        let tls_config = TlsConfig::default_chrome();
-        tls_config.apply_to_builder(&mut builder)?;
+        if let Some(opts) = tls_options {
+            opts.apply_to_builder(&mut builder)?;
+        } else {
+            let tls_config = TlsConfig::default_chrome();
+            tls_config.apply_to_builder(&mut builder)?;
+        }
 
         let connector = builder.build();
         let config = connector
@@ -273,6 +326,7 @@ impl ConnectJob {
     async fn ssl_handshake_generic<S: StreamSocket>(
         stream: S,
         host: &str,
+        tls_options: Option<&TlsOptions>,
     ) -> Result<(SslStream<S>, bool), NetError> {
         let mut builder =
             SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
@@ -282,8 +336,12 @@ impl ConnectJob {
             .set_alpn_protos(ALPN_PROTOS)
             .map_err(|_| NetError::SslProtocolError)?;
 
-        let tls_config = TlsConfig::default_chrome();
-        tls_config.apply_to_builder(&mut builder)?;
+        if let Some(opts) = tls_options {
+            opts.apply_to_builder(&mut builder)?;
+        } else {
+            let tls_config = TlsConfig::default_chrome();
+            tls_config.apply_to_builder(&mut builder)?;
+        }
 
         let connector = builder.build();
         let config = connector

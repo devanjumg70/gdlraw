@@ -1,6 +1,46 @@
 use crate::base::neterror::NetError;
 use boring::ssl::{SslConnectorBuilder, SslVerifyMode, SslVersion};
 
+pub mod impersonate;
+pub mod options;
+
+pub use self::impersonate::ImpersonateTarget;
+pub use self::options::{TlsOptions, TlsOptionsBuilder};
+
+/// A TLS protocol version.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct TlsVersion(pub SslVersion);
+
+impl TlsVersion {
+    pub const TLS_1_0: TlsVersion = TlsVersion(SslVersion::TLS1);
+    pub const TLS_1_1: TlsVersion = TlsVersion(SslVersion::TLS1_1);
+    pub const TLS_1_2: TlsVersion = TlsVersion(SslVersion::TLS1_2);
+    pub const TLS_1_3: TlsVersion = TlsVersion(SslVersion::TLS1_3);
+}
+
+impl From<TlsVersion> for SslVersion {
+    fn from(val: TlsVersion) -> Self {
+        val.0
+    }
+}
+
+/// A TLS ALPN protocol.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct AlpnProtocol(&'static [u8]);
+
+impl AlpnProtocol {
+    pub const HTTP1: AlpnProtocol = AlpnProtocol(b"http/1.1");
+    pub const HTTP2: AlpnProtocol = AlpnProtocol(b"h2");
+
+    pub const fn new(value: &'static [u8]) -> Self {
+        AlpnProtocol(value)
+    }
+
+    pub fn to_bytes(&self) -> &[u8] {
+        self.0
+    }
+}
+
 /// Configuration for TLS Client Hello fingerprinting.
 /// Matches Chromium's TLS configuration for accurate fingerprinting.
 #[derive(Debug, Clone)]

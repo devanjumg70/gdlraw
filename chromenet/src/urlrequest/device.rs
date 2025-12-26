@@ -1,4 +1,5 @@
 use crate::http::H2Settings;
+use crate::socket::tls::impersonate::ImpersonateTarget;
 
 #[derive(Debug, Clone)]
 pub struct Device {
@@ -8,6 +9,7 @@ pub struct Device {
     pub screen: Screen,
     pub capabilities: &'static [&'static str], // e.g., "touch", "mobile"
     pub h2_settings: Option<H2Settings>,
+    pub impersonate: ImpersonateTarget,
 }
 
 impl Device {
@@ -106,10 +108,7 @@ impl DeviceRegistry {
             Device {
                 title: "iPhone 12 Pro",
                 user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
-                user_agent_metadata: None, // Apple devices often don't send full CH in same way, or it's not in the TS file for this one?
-                // Wait, TS file has "iPhone 12 Pro" with "user-agent-metadata": undefined in my preview?
-                // Let's re-read the file carefully. The "iPhone 12 Pro" entry in TS file (lines 708-727) does NOT have user-agent-metadata.
-                // It seems newer Chrome/Pixel devices have it.
+                user_agent_metadata: None,
                 screen: Screen {
                     width: 390,
                     height: 844,
@@ -119,12 +118,12 @@ impl DeviceRegistry {
                 },
                 capabilities: &["touch", "mobile"],
                 h2_settings: None,
+                impersonate: ImpersonateTarget::Safari17, // Approximation
             },
             // Pixel 7
             Device {
                 title: "Pixel 7",
                 user_agent: "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile Safari/537.36",
-                // Note: %s needs to be replaced with Chrome version.
                 user_agent_metadata: Some(UserAgentMetadata {
                     platform: "Android",
                     platform_version: "13",
@@ -141,6 +140,7 @@ impl DeviceRegistry {
                 },
                 capabilities: &["touch", "mobile"],
                 h2_settings: None,
+                impersonate: ImpersonateTarget::Chrome124,
             },
             // Samsung Galaxy S8+
             Device {
@@ -162,6 +162,7 @@ impl DeviceRegistry {
                 },
                 capabilities: &["touch", "mobile"],
                 h2_settings: None,
+                impersonate: ImpersonateTarget::Chrome124, // Use modern Chrome for better compat
             },
         ])
     }

@@ -1,6 +1,7 @@
 use crate::base::neterror::NetError;
 use crate::socket::connectjob::ConnectJob;
 use crate::socket::stream::BoxedSocket;
+use crate::socket::tls::TlsOptions;
 use dashmap::DashMap;
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::VecDeque;
@@ -138,6 +139,7 @@ pub struct ClientSocketPool {
     // State
     groups: Arc<DashMap<GroupId, Group>>,
     total_active: Arc<AtomicUsize>,
+    tls_options: Option<TlsOptions>,
 }
 
 impl Clone for ClientSocketPool {
@@ -147,6 +149,7 @@ impl Clone for ClientSocketPool {
             max_sockets_total: self.max_sockets_total,
             groups: Arc::clone(&self.groups),
             total_active: Arc::clone(&self.total_active),
+            tls_options: self.tls_options.clone(),
         }
     }
 }
@@ -163,17 +166,18 @@ impl std::fmt::Debug for ClientSocketPool {
 
 impl Default for ClientSocketPool {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
 impl ClientSocketPool {
-    pub fn new() -> Self {
+    pub fn new(tls_options: Option<TlsOptions>) -> Self {
         Self {
             max_sockets_per_group: 6,
             max_sockets_total: 256,
             groups: Arc::new(DashMap::new()),
             total_active: Arc::new(AtomicUsize::new(0)),
+            tls_options,
         }
     }
 
@@ -261,7 +265,7 @@ impl ClientSocketPool {
         self.total_active.fetch_add(1, Ordering::Relaxed);
         drop(group); // Release lock before async connect
 
-        match ConnectJob::connect(url, proxy).await {
+        match ConnectJob::connect(url, proxy, self.tls_options.as_ref()).await {
             Ok(result) => Ok(Some(PoolResult {
                 socket: result.socket,
                 is_h2: result.is_h2,
