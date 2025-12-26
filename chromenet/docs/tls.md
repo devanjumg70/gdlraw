@@ -22,6 +22,7 @@ Force HTTPS for domains with HSTS policies.
 | Dynamic headers | ✅ Parse Strict-Transport-Security |
 | Subdomain matching | ✅ includeSubDomains support |
 | Expiration | ✅ max-age handling |
+| **Zero-Alloc Check** | ✅ Optimized parent domain iteration |
 
 ### Usage
 ```rust

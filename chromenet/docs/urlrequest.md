@@ -82,4 +82,7 @@ Emulated device definitions from Chromium's DevTools.
 - Desktop Chrome
 
 > [!TIP]
+> `DeviceRegistry::all()` calls are **cached** using `OnceLock`, making repeated lookups extremely fast (zero-allocation).
+
+> [!TIP]
 > Use `DeviceRegistry::get_by_title("Device Name")` to get a device.

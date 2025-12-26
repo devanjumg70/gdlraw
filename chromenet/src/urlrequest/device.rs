@@ -96,11 +96,12 @@ pub struct DeviceRegistry;
 
 impl DeviceRegistry {
     pub fn get_by_title(title: &str) -> Option<Device> {
-        Self::all().into_iter().find(|d| d.title == title)
+        Self::all().iter().find(|d| d.title == title).cloned()
     }
 
-    pub fn all() -> Vec<Device> {
-        vec![
+    pub fn all() -> &'static [Device] {
+        static DEVICES: std::sync::OnceLock<Vec<Device>> = std::sync::OnceLock::new();
+        DEVICES.get_or_init(|| vec![
             // iPhone 12 Pro
             Device {
                 title: "iPhone 12 Pro",
@@ -162,6 +163,6 @@ impl DeviceRegistry {
                 capabilities: &["touch", "mobile"],
                 h2_settings: None,
             },
-        ]
+        ])
     }
 }

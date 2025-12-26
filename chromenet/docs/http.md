@@ -30,7 +30,7 @@ stateDiagram-v2
 ### Features
 - **Automatic retry** with exponential backoff (max 3 attempts)
 - Auto-retry on reused socket failure
-- Cookie storage from `Set-Cookie` headers
+- **Cookie Integration**: Automatically queries `CookieMonster` and attaches `Cookie` headers
 - H1/H2 protocol selection via ALPN
 - **H2 SETTINGS fingerprinting** (NEW)
 - **Device emulation** (NEW)
@@ -75,6 +75,8 @@ let custom = H2Settings {
 Creates HTTP streams from pooled sockets with **H2 session caching**.
 
 ### H2 Multiplexing (NEW)
+**Performance Note**: Session cache uses optimized `(String, u16)` keys instead of formatted strings to reduce allocation overhead during lookups.
+
 ```rust
 // First request: creates new H2 connection, caches sender
 let stream1 = factory.create_stream(&url, None, None).await?;

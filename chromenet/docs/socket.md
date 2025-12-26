@@ -24,6 +24,7 @@ Manages connection pooling with Chromium-like limits and **request queuing**.
 | Priority Queue | Higher priority requests served first |
 | Idle Socket Cleanup | Background task prunes stale sockets |
 | **H2 Multiplexing** | Reuse HTTP/2 connections (NEW) |
+| **Optimized Pooling** | `GroupId` uses `Arc<str>` to minimize allocations |
 
 ### Limits
 | Limit | Default | Chromium |
@@ -52,6 +53,9 @@ Handles DNS → TCP → (Proxy) → TLS pipeline with **Happy Eyeballs** and **S
 - 4 minutes (matches Chromium)
 
 ### Proxy Support
+> [!IMPORTANT]
+> **Security**: Proxy passwords are stored using `Zeroizing<String>` to prevent credential leakage in memory dumps.
+
 | Type | Status |
 |------|--------|
 | HTTP CONNECT | ✅ Implemented |

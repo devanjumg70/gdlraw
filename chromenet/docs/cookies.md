@@ -3,12 +3,19 @@
 ## Files
 | File | Lines | Purpose |
 |------|-------|---------|
-| [canonical_cookie.rs](../src/cookies/canonical_cookie.rs) | ~70 | Cookie data structure |
+| [canonicalcookie.rs](../src/cookies/canonicalcookie.rs) | ~70 | Cookie data structure (Renamed from `canonical_cookie.rs`) |
 | [monster.rs](../src/cookies/monster.rs) | ~270 | Cookie storage & matching |
 | [persistence.rs](../src/cookies/persistence.rs) | ~50 | JSON save/load |
 | [psl.rs](../src/cookies/psl.rs) | ~130 | Public Suffix List validation |
 | [browser.rs](../src/cookies/browser.rs) | ~385 | Chrome/Firefox extraction |
 | [oscrypt.rs](../src/cookies/oscrypt.rs) | ~145 | Chrome v10 decryption |
+
+---
+
+## Security
+
+> [!IMPORTANT]
+> **Zeroize Implementation**: Sensitive key material (decryption keys, passwords) is automatically zeroed out from memory when dropped using the `zeroize` crate. This applies to `AES` keys derived for cookie decryption.
 
 ---
 

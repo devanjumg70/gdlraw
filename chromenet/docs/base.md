@@ -18,6 +18,7 @@ Comprehensive error enum mapping Chromium's `net/base/net_error_list.h`. Contain
 | -100s | SSL/TLS | `SslProtocolError`, `SslVersionOrCipherMismatch`, `EchNotNegotiated` |
 | -300s | HTTP | `InvalidUrl`, `TooManyRedirects`, `EmptyResponse` |
 | -300s | HTTP/2 | `Http2ProtocolError`, `Http2FlowControlError` |
+| -10000s | Custom | `RedirectCycleDetected` (Moved from -900s to avoid Blob collision) |
 
 ### Key Methods
 ```rust
@@ -43,12 +44,14 @@ pub enum LoadState {
     WaitingForAvailableSocket,
     WaitingForDelegate,
     WaitingForCache,
-    WaitingForAppCache,
+    ObsoleteWaitingForAppCache, // Deprecated in Chromium
     DownloadingPacFile,
     ResolvingProxyForUrl,
+    ResolvingHostInPacFile,     // NEW: Added for completeness
     ResolvingHost,
     Connecting,
     SslHandshake,
+    EstablishingProxyTunnel,    // NEW: Added for completeness
     SendingRequest,
     WaitingForResponse,
     ReadingResponse,
@@ -56,4 +59,4 @@ pub enum LoadState {
 ```
 
 > [!NOTE]
-> `LoadState` is defined but **not currently used** in the codebase. The transaction state machine uses a private enum.
+> `LoadState` matches Chromium's definitions, including deprecated states marked as obsolete.
