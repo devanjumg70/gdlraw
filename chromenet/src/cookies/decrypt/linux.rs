@@ -8,7 +8,7 @@
 //! - Attribute: `("application", "chrome")` (or browser variant)
 //! - Label: "Chrome Safe Storage" or "Chromium Safe Storage"
 
-use crate::cookies::error::CookieExtractionError;
+use crate::base::neterror::NetError;
 use std::collections::HashMap;
 
 /// Get the v11 encryption key from GNOME Keyring/Secret Service.
@@ -21,14 +21,14 @@ use std::collections::HashMap;
 /// * `Ok(None)` - Keyring is available but no key found for this application
 /// * `Err(...)` - Keyring is unavailable or access was denied
 #[cfg(target_os = "linux")]
-pub fn get_v11_key(application: &str) -> Result<Option<[u8; 16]>, CookieExtractionError> {
+pub fn get_v11_key(application: &str) -> Result<Option<[u8; 16]>, NetError> {
     // Use the blocking API for simplicity (no async runtime needed)
     use secret_service::blocking::SecretService;
     use secret_service::EncryptionType;
 
     // Connect to Secret Service
     let ss = SecretService::connect(EncryptionType::Dh)
-        .map_err(|_| CookieExtractionError::KeyringUnavailable)?;
+        .map_err(|_| NetError::CookieKeyringUnavailable)?;
 
     // Search for Chrome's password using the application attribute
     let mut attributes = HashMap::new();
@@ -36,7 +36,7 @@ pub fn get_v11_key(application: &str) -> Result<Option<[u8; 16]>, CookieExtracti
 
     let search_result = ss
         .search_items(attributes)
-        .map_err(|_| CookieExtractionError::KeyringUnavailable)?;
+        .map_err(|_| NetError::CookieKeyringUnavailable)?;
 
     // Check unlocked items first, then locked
     let item = search_result
@@ -51,13 +51,13 @@ pub fn get_v11_key(application: &str) -> Result<Option<[u8; 16]>, CookieExtracti
     // Unlock if needed
     if search_result.unlocked.is_empty() {
         item.unlock()
-            .map_err(|_| CookieExtractionError::KeyringUnavailable)?;
+            .map_err(|_| NetError::CookieKeyringUnavailable)?;
     }
 
     // Get the secret (password)
     let mut secret = item
         .get_secret()
-        .map_err(|_| CookieExtractionError::KeyringUnavailable)?;
+        .map_err(|_| NetError::CookieKeyringUnavailable)?;
 
     // Derive the AES key using PBKDF2 (1 iteration for Linux)
     let key = super::derive_key(&secret, 1);

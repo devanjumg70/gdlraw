@@ -7,14 +7,14 @@ fn test_net_error_roundtrip() {
     let code = original.as_i32();
     assert_eq!(code, -102);
     let converted = NetError::from(code);
-    assert_eq!(converted, original);
+    assert!(matches!(converted, NetError::ConnectionRefused));
 
     // Custom error
     let custom = NetError::RedirectCycleDetected;
     let custom_code = custom.as_i32();
     assert_eq!(custom_code, -10000);
     let custom_converted = NetError::from(custom_code);
-    assert_eq!(custom_converted, custom);
+    assert!(matches!(custom_converted, NetError::RedirectCycleDetected));
 }
 
 #[test]

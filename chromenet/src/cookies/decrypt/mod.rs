@@ -17,7 +17,7 @@ pub mod macos;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
-use crate::cookies::error::CookieExtractionError;
+use crate::base::neterror::NetError;
 
 /// Derive a 16-byte AES key from a password using PBKDF2-HMAC-SHA1.
 ///
@@ -46,7 +46,7 @@ pub fn derive_key(password: &[u8], iterations: u32) -> [u8; 16] {
 /// This is a convenience function that calls the appropriate platform-specific
 /// implementation based on the current OS.
 #[allow(unused_variables)]
-pub fn get_chrome_key(application: &str) -> Result<Option<[u8; 16]>, CookieExtractionError> {
+pub fn get_chrome_key(application: &str) -> Result<Option<[u8; 16]>, NetError> {
     #[cfg(target_os = "linux")]
     {
         linux::get_v11_key(application)

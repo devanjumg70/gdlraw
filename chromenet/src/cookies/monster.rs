@@ -298,7 +298,7 @@ impl CookieMonster {
         &self,
         browser: crate::cookies::browser::Browser,
         domain_filter: Option<&str>,
-    ) -> Result<usize, crate::cookies::error::CookieExtractionError> {
+    ) -> Result<usize, crate::base::neterror::NetError> {
         use crate::cookies::browser::BrowserCookieReader;
 
         let mut reader = BrowserCookieReader::new(browser);
@@ -322,7 +322,7 @@ impl CookieMonster {
         browser: crate::cookies::browser::Browser,
         profile: &str,
         domain_filter: Option<&str>,
-    ) -> Result<usize, crate::cookies::error::CookieExtractionError> {
+    ) -> Result<usize, crate::base::neterror::NetError> {
         use crate::cookies::browser::BrowserCookieReader;
 
         let mut reader = BrowserCookieReader::new(browser).with_profile(profile);

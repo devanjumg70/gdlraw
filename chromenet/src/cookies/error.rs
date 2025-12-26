@@ -1,94 +1,92 @@
-//! Error types for browser cookie extraction.
+//! Cookie extraction error types.
 //!
-//! Provides specific error variants for cookie extraction failures,
-//! enabling proper error handling and user-friendly messages.
+//! # Deprecated
+//!
+//! This module is deprecated. Use [`crate::base::neterror::NetError`] instead.
+//! Cookie extraction errors have been unified into `NetError`.
 
-use std::path::PathBuf;
-use thiserror::Error;
+use crate::base::neterror::NetError;
 
-/// Errors that can occur during browser cookie extraction.
-#[derive(Error, Debug)]
-pub enum CookieExtractionError {
-    /// Browser is not installed on the system.
-    #[error("Browser not found on system: {0}")]
-    BrowserNotFound(String),
+/// Cookie extraction error type.
+///
+/// # Deprecated
+///
+/// This type is deprecated. Use [`NetError`] instead.
+/// The following mappings apply:
+///
+/// | Old | New |
+/// |-----|-----|
+/// | `CookieExtractionError::BrowserNotFound` | `NetError::BrowserNotFound` |
+/// | `CookieExtractionError::DatabaseNotFound` | `NetError::CookieDbNotFound` |
+/// | `CookieExtractionError::DecryptionFailed` | `NetError::CookieDecryptionFailed` |
+/// | `CookieExtractionError::DatabaseLocked` | `NetError::CookieDatabaseLocked` |
+/// | `CookieExtractionError::UnsupportedVersion` | `NetError::CookieUnsupportedVersion` |
+/// | `CookieExtractionError::PlatformNotSupported` | `NetError::CookiePlatformNotSupported` |
+/// | `CookieExtractionError::ProfileNotFound` | `NetError::CookieProfileNotFound` |
+/// | `CookieExtractionError::KeyringUnavailable` | `NetError::CookieKeyringUnavailable` |
+/// | `CookieExtractionError::InvalidData` | `NetError::CookieInvalidData` |
+/// | `CookieExtractionError::Database` | `NetError::CookieDatabaseError` |
+#[deprecated(since = "0.2.0", note = "Use crate::base::neterror::NetError instead")]
+pub type CookieExtractionError = NetError;
 
-    /// Cookie database file does not exist at the expected path.
-    #[error("Cookie database not found: {0}")]
-    DatabaseNotFound(PathBuf),
+/// Result type alias for cookie extraction operations.
+#[deprecated(since = "0.2.0", note = "Use Result<T, NetError> instead")]
+pub type CookieResult<T> = Result<T, NetError>;
 
-    /// Failed to decrypt encrypted cookie values.
-    #[error("Failed to decrypt cookies: {0}")]
-    DecryptionFailed(String),
+// Helper functions for creating cookie errors with the new types
 
-    /// Database is locked by the browser process.
-    /// User should close the browser or copy the database file.
-    #[error("Database is locked by browser (try closing the browser)")]
-    DatabaseLocked,
-
-    /// Browser version uses an unsupported encryption scheme.
-    #[error("Unsupported browser version: {0}")]
-    UnsupportedVersion(String),
-
-    /// Feature is not supported on the current platform.
-    #[error("Platform not supported for this browser: {0}")]
-    PlatformNotSupported(String),
-
-    /// Specified browser profile does not exist.
-    #[error("Profile not found: {0}")]
-    ProfileNotFound(String),
-
-    /// System keyring is not available or access was denied.
-    #[error("Keyring access denied or not available")]
-    KeyringUnavailable,
-
-    /// Cookie data is malformed or corrupted.
-    #[error("Invalid cookie data: {0}")]
-    InvalidData(String),
-
-    /// I/O error when reading files.
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
-    /// SQLite database error.
-    #[error("Database error: {0}")]
-    Database(String),
+/// Create a browser not found error.
+#[deprecated(since = "0.2.0", note = "Use NetError::browser_not_found instead")]
+pub fn browser_not_found(browser: impl Into<String>) -> NetError {
+    NetError::browser_not_found(browser)
 }
 
-impl From<rusqlite::Error> for CookieExtractionError {
+/// Create a database not found error.
+#[deprecated(since = "0.2.0", note = "Use NetError::cookie_db_not_found instead")]
+pub fn database_not_found(path: impl Into<String>) -> NetError {
+    NetError::cookie_db_not_found(path)
+}
+
+/// Create a decryption failed error.
+#[deprecated(
+    since = "0.2.0",
+    note = "Use NetError::cookie_decryption_failed instead"
+)]
+pub fn decryption_failed(browser: impl Into<String>, reason: impl Into<String>) -> NetError {
+    NetError::cookie_decryption_failed(browser, reason)
+}
+
+/// Create an invalid data error.
+#[deprecated(since = "0.2.0", note = "Use NetError::cookie_invalid_data instead")]
+pub fn invalid_data(reason: impl Into<String>) -> NetError {
+    NetError::cookie_invalid_data(reason)
+}
+
+// Conversion from rusqlite errors
+impl From<rusqlite::Error> for NetError {
     fn from(err: rusqlite::Error) -> Self {
         match err {
             rusqlite::Error::SqliteFailure(e, _)
                 if e.code == rusqlite::ffi::ErrorCode::DatabaseBusy
                     || e.code == rusqlite::ffi::ErrorCode::DatabaseLocked =>
             {
-                CookieExtractionError::DatabaseLocked
+                NetError::CookieDatabaseLocked
             }
-            _ => CookieExtractionError::Database(err.to_string()),
+            _ => NetError::CookieDatabaseError {
+                message: err.to_string(),
+            },
         }
     }
 }
-
-/// Result type alias for cookie extraction operations.
-pub type CookieResult<T> = Result<T, CookieExtractionError>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_error_display() {
-        let err = CookieExtractionError::BrowserNotFound("Chrome".to_string());
-        assert!(err.to_string().contains("Chrome"));
-
-        let err = CookieExtractionError::DatabaseNotFound(PathBuf::from("/path/to/cookies"));
-        assert!(err.to_string().contains("/path/to/cookies"));
-    }
-
-    #[test]
-    fn test_database_locked_conversion() {
-        // Simulate a database busy error
-        let err = CookieExtractionError::DatabaseLocked;
-        assert!(err.to_string().contains("locked"));
+    #[allow(deprecated)]
+    fn test_type_alias_works() {
+        let err: CookieExtractionError = NetError::CookieDatabaseLocked;
+        assert!(matches!(err, NetError::CookieDatabaseLocked));
     }
 }

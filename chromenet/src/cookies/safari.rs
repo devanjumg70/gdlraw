@@ -13,8 +13,8 @@
 //! - https://github.com/libyal/dtformats/blob/main/documentation/Safari%20Cookies.asciidoc
 //! - https://github.com/als0052/BinaryCookieReader
 
+use crate::base::neterror::NetError;
 use crate::cookies::canonicalcookie::{CanonicalCookie, CookiePriority, SameSite};
-use crate::cookies::error::CookieExtractionError;
 use std::io::{Cursor, Read};
 use time::OffsetDateTime;
 
@@ -29,15 +29,15 @@ const MAGIC: &[u8; 4] = b"cook";
 /// # Returns
 /// * `Ok(cookies)` - Successfully parsed cookies
 /// * `Err(...)` - Parse error
-pub fn parse_binary_cookies(data: &[u8]) -> Result<Vec<CanonicalCookie>, CookieExtractionError> {
+pub fn parse_binary_cookies(data: &[u8]) -> Result<Vec<CanonicalCookie>, NetError> {
     if data.len() < 8 {
-        return Err(CookieExtractionError::InvalidData("File too small".into()));
+        return Err(NetError::cookie_invalid_data("File too small"));
     }
 
     // Check magic
     if &data[0..4] != MAGIC {
-        return Err(CookieExtractionError::InvalidData(
-            "Invalid magic bytes (not a Safari cookies file)".into(),
+        return Err(NetError::cookie_invalid_data(
+            "Invalid magic bytes (not a Safari cookies file)",
         ));
     }
 
@@ -60,9 +60,7 @@ pub fn parse_binary_cookies(data: &[u8]) -> Result<Vec<CanonicalCookie>, CookieE
         let page_end = page_start + page_size as usize;
 
         if page_end > data.len() {
-            return Err(CookieExtractionError::InvalidData(
-                "Page extends beyond file".into(),
-            ));
+            return Err(NetError::cookie_invalid_data("Page extends beyond file"));
         }
 
         let page_data = &data[page_start..page_end];
@@ -76,9 +74,9 @@ pub fn parse_binary_cookies(data: &[u8]) -> Result<Vec<CanonicalCookie>, CookieE
 }
 
 /// Parse a single page of cookies.
-fn parse_page(data: &[u8]) -> Result<Vec<CanonicalCookie>, CookieExtractionError> {
+fn parse_page(data: &[u8]) -> Result<Vec<CanonicalCookie>, NetError> {
     if data.len() < 8 {
-        return Err(CookieExtractionError::InvalidData("Page too small".into()));
+        return Err(NetError::cookie_invalid_data("Page too small"));
     }
 
     let mut cursor = Cursor::new(data);
@@ -106,11 +104,9 @@ fn parse_page(data: &[u8]) -> Result<Vec<CanonicalCookie>, CookieExtractionError
 }
 
 /// Parse a single cookie record.
-fn parse_cookie(data: &[u8]) -> Result<CanonicalCookie, CookieExtractionError> {
+fn parse_cookie(data: &[u8]) -> Result<CanonicalCookie, NetError> {
     if data.len() < 48 {
-        return Err(CookieExtractionError::InvalidData(
-            "Cookie record too small".into(),
-        ));
+        return Err(NetError::cookie_invalid_data("Cookie record too small"));
     }
 
     let mut cursor = Cursor::new(data);
@@ -183,47 +179,42 @@ fn parse_cookie(data: &[u8]) -> Result<CanonicalCookie, CookieExtractionError> {
 }
 
 /// Read a 32-bit unsigned integer in big-endian.
-fn read_u32_be(cursor: &mut Cursor<&[u8]>) -> Result<u32, CookieExtractionError> {
+fn read_u32_be(cursor: &mut Cursor<&[u8]>) -> Result<u32, NetError> {
     let mut buf = [0u8; 4];
     cursor
         .read_exact(&mut buf)
-        .map_err(|_| CookieExtractionError::InvalidData("Unexpected EOF".into()))?;
+        .map_err(|_| NetError::cookie_invalid_data("Unexpected EOF"))?;
     Ok(u32::from_be_bytes(buf))
 }
 
 /// Read a 32-bit unsigned integer in little-endian.
-fn read_u32_le(cursor: &mut Cursor<&[u8]>) -> Result<u32, CookieExtractionError> {
+fn read_u32_le(cursor: &mut Cursor<&[u8]>) -> Result<u32, NetError> {
     let mut buf = [0u8; 4];
     cursor
         .read_exact(&mut buf)
-        .map_err(|_| CookieExtractionError::InvalidData("Unexpected EOF".into()))?;
+        .map_err(|_| NetError::cookie_invalid_data("Unexpected EOF"))?;
     Ok(u32::from_le_bytes(buf))
 }
 
 /// Read a 64-bit float in little-endian.
-fn read_f64_le(cursor: &mut Cursor<&[u8]>) -> Result<f64, CookieExtractionError> {
+fn read_f64_le(cursor: &mut Cursor<&[u8]>) -> Result<f64, NetError> {
     let mut buf = [0u8; 8];
     cursor
         .read_exact(&mut buf)
-        .map_err(|_| CookieExtractionError::InvalidData("Unexpected EOF".into()))?;
+        .map_err(|_| NetError::cookie_invalid_data("Unexpected EOF"))?;
     Ok(f64::from_le_bytes(buf))
 }
 
 /// Read a null-terminated string from the data.
-fn read_null_terminated_string(
-    data: &[u8],
-    offset: usize,
-) -> Result<String, CookieExtractionError> {
+fn read_null_terminated_string(data: &[u8], offset: usize) -> Result<String, NetError> {
     if offset >= data.len() {
-        return Err(CookieExtractionError::InvalidData(
-            "String offset out of bounds".into(),
-        ));
+        return Err(NetError::cookie_invalid_data("String offset out of bounds"));
     }
 
     let slice = &data[offset..];
     let end = slice.iter().position(|&b| b == 0).unwrap_or(slice.len());
     String::from_utf8(slice[..end].to_vec())
-        .map_err(|_| CookieExtractionError::InvalidData("Invalid UTF-8 in string".into()))
+        .map_err(|_| NetError::cookie_invalid_data("Invalid UTF-8 in string"))
 }
 
 /// Convert Mac Absolute Time to OffsetDateTime.

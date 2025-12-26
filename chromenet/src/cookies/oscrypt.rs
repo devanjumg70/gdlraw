@@ -10,7 +10,6 @@
 //! - **v11 (Linux)**: AES-CBC with Keyring-derived key
 
 use crate::base::neterror::NetError;
-use crate::cookies::error::CookieExtractionError;
 
 /// v10 prefix used by Chrome for encrypted values.
 pub const V10_PREFIX: &[u8] = b"v10";
@@ -172,18 +171,15 @@ pub fn decrypt_for_browser(encrypted: &[u8], browser: &str) -> Result<String, Ne
 }
 
 /// Attempt to decrypt with better error handling.
-pub fn decrypt_cookie(encrypted: &[u8]) -> Result<String, CookieExtractionError> {
+pub fn decrypt_cookie(encrypted: &[u8]) -> Result<String, NetError> {
     decrypt_cookie_for_browser(encrypted, "chrome")
 }
 
 /// Decrypt cookie with browser-specific keyring lookup.
-pub fn decrypt_cookie_for_browser(
-    encrypted: &[u8],
-    browser: &str,
-) -> Result<String, CookieExtractionError> {
+pub fn decrypt_cookie_for_browser(encrypted: &[u8], browser: &str) -> Result<String, NetError> {
     if encrypted.starts_with(V10_PREFIX) {
         decrypt_v10(encrypted)
-            .ok_or_else(|| CookieExtractionError::DecryptionFailed("v10 decryption failed".into()))
+            .ok_or_else(|| NetError::cookie_decryption_failed(browser, "v10 decryption failed"))
     } else if encrypted.starts_with(V11_PREFIX) {
         // v11 requires keyring access
         #[cfg(target_os = "linux")]
@@ -192,25 +188,25 @@ pub fn decrypt_cookie_for_browser(
             let application = linux::browser_to_application(browser);
             match super::decrypt::get_chrome_key(application) {
                 Ok(Some(key)) => decrypt_v10_with_key(encrypted, &key).ok_or_else(|| {
-                    CookieExtractionError::DecryptionFailed("v11 decryption failed".into())
+                    NetError::cookie_decryption_failed(browser, "v11 decryption failed")
                 }),
-                Ok(None) => Err(CookieExtractionError::KeyringUnavailable),
+                Ok(None) => Err(NetError::CookieKeyringUnavailable),
                 Err(e) => Err(e),
             }
         }
         #[cfg(not(target_os = "linux"))]
         {
             let _ = browser;
-            Err(CookieExtractionError::PlatformNotSupported(
-                "v11 keyring not available on this platform".into(),
-            ))
+            Err(NetError::CookiePlatformNotSupported {
+                platform: "v11 keyring not available on this platform".into(),
+            })
         }
     } else if encrypted.is_empty() {
         Ok(String::new())
     } else {
         // Try as plain text (unencrypted)
         String::from_utf8(encrypted.to_vec())
-            .map_err(|_| CookieExtractionError::InvalidData("invalid UTF-8 in cookie value".into()))
+            .map_err(|_| NetError::cookie_invalid_data("invalid UTF-8 in cookie value"))
     }
 }
 

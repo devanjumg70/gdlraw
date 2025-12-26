@@ -10,7 +10,7 @@
 //! - Ciphertext + Tag: remaining bytes
 //! - Algorithm: AES-256-GCM
 
-use crate::cookies::error::CookieExtractionError;
+use crate::base::neterror::NetError;
 use std::path::Path;
 
 /// Get the Local State file path for a Chromium-based browser.
@@ -57,10 +57,7 @@ pub fn get_local_state_path(
 /// * `Ok(plaintext)` - Successfully decrypted
 /// * `Err(...)` - Decryption failed
 #[cfg(target_os = "windows")]
-pub fn decrypt_v10_windows(
-    encrypted: &[u8],
-    key: &[u8; 32],
-) -> Result<String, CookieExtractionError> {
+pub fn decrypt_v10_windows(encrypted: &[u8], key: &[u8; 32]) -> Result<String, NetError> {
     use aes_gcm::{
         aead::{Aead, KeyInit},
         Aes256Gcm, Nonce,
@@ -70,61 +67,65 @@ pub fn decrypt_v10_windows(
     const NONCE_LEN: usize = 12;
 
     if !encrypted.starts_with(V10_PREFIX) {
-        return Err(CookieExtractionError::DecryptionFailed(
-            "Not a v10 encrypted value".into(),
-        ));
+        return Err(NetError::CookieDecryptionFailed {
+            browser: "chrome".into(),
+            reason: "Not a v10 encrypted value".into(),
+        });
     }
 
     let data = &encrypted[V10_PREFIX.len()..];
     if data.len() < NONCE_LEN {
-        return Err(CookieExtractionError::DecryptionFailed(
-            "Data too short".into(),
-        ));
+        return Err(NetError::CookieDecryptionFailed {
+            browser: "chrome".into(),
+            reason: "Data too short".into(),
+        });
     }
 
     let nonce = Nonce::from_slice(&data[..NONCE_LEN]);
     let ciphertext = &data[NONCE_LEN..];
 
-    let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|_| CookieExtractionError::DecryptionFailed("Invalid key".into()))?;
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| NetError::CookieDecryptionFailed {
+        browser: "chrome".into(),
+        reason: "Invalid key".into(),
+    })?;
 
-    let plaintext = cipher
-        .decrypt(nonce, ciphertext)
-        .map_err(|_| CookieExtractionError::DecryptionFailed("AES-GCM decryption failed".into()))?;
+    let plaintext =
+        cipher
+            .decrypt(nonce, ciphertext)
+            .map_err(|_| NetError::CookieDecryptionFailed {
+                browser: "chrome".into(),
+                reason: "AES-GCM decryption failed".into(),
+            })?;
 
     String::from_utf8(plaintext)
-        .map_err(|_| CookieExtractionError::InvalidData("Invalid UTF-8 in decrypted value".into()))
+        .map_err(|_| NetError::cookie_invalid_data("Invalid UTF-8 in decrypted value"))
 }
 
 /// Get Chrome's encryption key from Local State file using DPAPI.
 #[cfg(target_os = "windows")]
-pub fn get_dpapi_key(local_state_path: &Path) -> Result<[u8; 32], CookieExtractionError> {
+pub fn get_dpapi_key(local_state_path: &Path) -> Result<[u8; 32], NetError> {
     use base64::Engine;
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
     // Read Local State JSON
     let local_state = std::fs::read_to_string(local_state_path)?;
     let json: serde_json::Value = serde_json::from_str(&local_state)
-        .map_err(|_| CookieExtractionError::InvalidData("Invalid Local State JSON".into()))?;
+        .map_err(|_| NetError::cookie_invalid_data("Invalid Local State JSON".into()))?;
 
     // Extract encrypted_key from os_crypt section
-    let encrypted_key_b64 = json["os_crypt"]["encrypted_key"].as_str().ok_or_else(|| {
-        CookieExtractionError::InvalidData("No encrypted_key in Local State".into())
-    })?;
+    let encrypted_key_b64 = json["os_crypt"]["encrypted_key"]
+        .as_str()
+        .ok_or_else(|| NetError::cookie_invalid_data("No encrypted_key in Local State".into()))?;
 
     // Base64 decode
     let encrypted_key = base64::engine::general_purpose::STANDARD
         .decode(encrypted_key_b64)
-        .map_err(|_| {
-            CookieExtractionError::InvalidData("Invalid base64 in encrypted_key".into())
-        })?;
+        .map_err(|_| NetError::cookie_invalid_data("Invalid base64 in encrypted_key".into()))?;
 
     // Strip "DPAPI" prefix (5 bytes)
     const DPAPI_PREFIX: &[u8] = b"DPAPI";
     if !encrypted_key.starts_with(DPAPI_PREFIX) {
-        return Err(CookieExtractionError::InvalidData(
-            "Missing DPAPI prefix".into(),
-        ));
+        return Err(NetError::cookie_invalid_data("Missing DPAPI prefix"));
     }
     let dpapi_data = &encrypted_key[DPAPI_PREFIX.len()..];
 
@@ -137,13 +138,17 @@ pub fn get_dpapi_key(local_state_path: &Path) -> Result<[u8; 32], CookieExtracti
 
     unsafe {
         CryptUnprotectData(&mut blob_in, None, None, None, None, 0, &mut blob_out).map_err(
-            |_| CookieExtractionError::DecryptionFailed("DPAPI decryption failed".into()),
+            |_| NetError::CookieDecryptionFailed {
+                browser: "chrome".into(),
+                reason: "DPAPI decryption failed".into(),
+            },
         )?;
 
         if blob_out.cbData != 32 {
-            return Err(CookieExtractionError::DecryptionFailed(
-                "Unexpected key length from DPAPI".into(),
-            ));
+            return Err(NetError::CookieDecryptionFailed {
+                browser: "chrome".into(),
+                reason: "Unexpected key length from DPAPI".into(),
+            });
         }
 
         let mut key = [0u8; 32];

@@ -1,6 +1,12 @@
+use std::io;
+use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq, Clone, Copy)]
+/// Network error type mirroring Chromium's net/base/net_error_list.h.
+///
+/// This enum covers all network-level errors including connection, SSL/TLS,
+/// HTTP, and cookie extraction errors.
+#[derive(Debug, Error, Clone)]
 pub enum NetError {
     // Connection Errors
     #[error("Connection closed (TCP FIN)")]
@@ -292,6 +298,45 @@ pub enum NetError {
     #[error("HTTP/2 pushed response does not match")]
     Http2PushedResponseDoesNotMatch,
 
+    // Context-rich connection errors
+    #[error("Connection to {host}:{port} failed")]
+    ConnectionFailedTo {
+        host: String,
+        port: u16,
+        #[source]
+        source: Arc<io::Error>,
+    },
+    #[error("DNS resolution for {domain} failed")]
+    NameNotResolvedFor {
+        domain: String,
+        #[source]
+        source: Arc<io::Error>,
+    },
+    #[error("SSL handshake with {host} failed: {reason}")]
+    SslHandshakeFailedWith { host: String, reason: String },
+
+    // Cookie extraction errors (unified from CookieExtractionError)
+    #[error("Browser {browser} not found")]
+    BrowserNotFound { browser: String },
+    #[error("Cookie database not found: {path}")]
+    CookieDbNotFound { path: String },
+    #[error("Failed to decrypt {browser} cookies: {reason}")]
+    CookieDecryptionFailed { browser: String, reason: String },
+    #[error("Cookie database locked (close browser)")]
+    CookieDatabaseLocked,
+    #[error("Browser version not supported: {version}")]
+    CookieUnsupportedVersion { version: String },
+    #[error("Platform not supported: {platform}")]
+    CookiePlatformNotSupported { platform: String },
+    #[error("Profile not found: {profile}")]
+    CookieProfileNotFound { profile: String },
+    #[error("Keyring unavailable")]
+    CookieKeyringUnavailable,
+    #[error("Invalid cookie data: {reason}")]
+    CookieInvalidData { reason: String },
+    #[error("Cookie database error: {message}")]
+    CookieDatabaseError { message: String },
+
     #[error("Unknown error: {0}")]
     Unknown(i32),
 }
@@ -444,8 +489,99 @@ impl NetError {
             NetError::CertificateTransparencyRequired => -10010,
             NetError::NotImplemented => -10011,
             NetError::FileNotFound => -10012,
+            // Context variants (same code as simple variant)
+            NetError::ConnectionFailedTo { .. } => -104,
+            NetError::NameNotResolvedFor { .. } => -105,
+            NetError::SslHandshakeFailedWith { .. } => -107,
+            // Cookie extraction errors
+            NetError::BrowserNotFound { .. } => -10020,
+            NetError::CookieDbNotFound { .. } => -10021,
+            NetError::CookieDecryptionFailed { .. } => -10022,
+            NetError::CookieDatabaseLocked => -10023,
+            NetError::CookieUnsupportedVersion { .. } => -10024,
+            NetError::CookiePlatformNotSupported { .. } => -10025,
+            NetError::CookieProfileNotFound { .. } => -10026,
+            NetError::CookieKeyringUnavailable => -10027,
+            NetError::CookieInvalidData { .. } => -10028,
+            NetError::CookieDatabaseError { .. } => -10029,
             NetError::Unknown(code) => *code,
         }
+    }
+
+    // Helper constructors for context-rich errors
+
+    /// Create connection failed error with context.
+    pub fn connection_failed_to(host: impl Into<String>, port: u16, source: io::Error) -> Self {
+        Self::ConnectionFailedTo {
+            host: host.into(),
+            port,
+            source: Arc::new(source),
+        }
+    }
+
+    /// Create DNS resolution error with context.
+    pub fn dns_failed(domain: impl Into<String>, source: io::Error) -> Self {
+        Self::NameNotResolvedFor {
+            domain: domain.into(),
+            source: Arc::new(source),
+        }
+    }
+
+    /// Create SSL handshake error with context.
+    pub fn ssl_handshake_failed(host: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::SslHandshakeFailedWith {
+            host: host.into(),
+            reason: reason.into(),
+        }
+    }
+
+    /// Create browser not found error.
+    pub fn browser_not_found(browser: impl Into<String>) -> Self {
+        Self::BrowserNotFound {
+            browser: browser.into(),
+        }
+    }
+
+    /// Create cookie decryption failed error.
+    pub fn cookie_decryption_failed(browser: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::CookieDecryptionFailed {
+            browser: browser.into(),
+            reason: reason.into(),
+        }
+    }
+
+    /// Create cookie database not found error.
+    pub fn cookie_db_not_found(path: impl Into<String>) -> Self {
+        Self::CookieDbNotFound { path: path.into() }
+    }
+
+    /// Create cookie invalid data error.
+    pub fn cookie_invalid_data(reason: impl Into<String>) -> Self {
+        Self::CookieInvalidData {
+            reason: reason.into(),
+        }
+    }
+}
+
+impl From<io::Error> for NetError {
+    fn from(e: io::Error) -> Self {
+        use io::ErrorKind;
+        match e.kind() {
+            ErrorKind::ConnectionRefused => Self::ConnectionRefused,
+            ErrorKind::ConnectionReset => Self::ConnectionReset,
+            ErrorKind::ConnectionAborted => Self::ConnectionAborted,
+            ErrorKind::NotConnected => Self::SocketNotConnected,
+            ErrorKind::AddrInUse => Self::AddressInUse,
+            ErrorKind::AddrNotAvailable => Self::AddressUnreachable,
+            ErrorKind::TimedOut => Self::ConnectionTimedOut,
+            _ => Self::ConnectionFailed,
+        }
+    }
+}
+
+impl From<url::ParseError> for NetError {
+    fn from(_: url::ParseError) -> Self {
+        Self::InvalidUrl
     }
 }
 

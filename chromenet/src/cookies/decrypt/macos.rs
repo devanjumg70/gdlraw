@@ -8,7 +8,7 @@
 //! - Account: "Chrome" (or browser variant)
 //! - Key derivation: PBKDF2-HMAC-SHA1 with 1003 iterations
 
-use crate::cookies::error::CookieExtractionError;
+use crate::base::neterror::NetError;
 
 /// Keychain service names for each browser.
 pub fn browser_keychain_service(browser: &str) -> &'static str {
@@ -44,7 +44,7 @@ pub fn browser_keychain_account(browser: &str) -> &'static str {
 /// * `Ok(None)` - Keychain entry not found
 /// * `Err(...)` - Keychain access denied
 #[cfg(target_os = "macos")]
-pub fn get_keychain_key(application: &str) -> Result<Option<[u8; 16]>, CookieExtractionError> {
+pub fn get_keychain_key(application: &str) -> Result<Option<[u8; 16]>, NetError> {
     use security_framework::passwords::get_generic_password;
 
     let service = browser_keychain_service(application);
@@ -61,7 +61,7 @@ pub fn get_keychain_key(application: &str) -> Result<Option<[u8; 16]>, CookieExt
             // errSecItemNotFound - no password stored
             Ok(None)
         }
-        Err(_) => Err(CookieExtractionError::KeyringUnavailable),
+        Err(_) => Err(NetError::CookieKeyringUnavailable),
     }
 }
 

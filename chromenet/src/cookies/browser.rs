@@ -11,7 +11,6 @@
 
 use crate::base::neterror::NetError;
 use crate::cookies::canonicalcookie::{CanonicalCookie, CookiePriority, SameSite};
-use crate::cookies::error::{CookieExtractionError, CookieResult};
 use crate::cookies::oscrypt;
 use std::path::PathBuf;
 use time::OffsetDateTime;
@@ -393,13 +392,13 @@ impl BrowserCookieReader {
     }
 
     /// Read cookies with better error handling.
-    pub fn read_cookies_v2(&self) -> CookieResult<Vec<CanonicalCookie>> {
+    pub fn read_cookies_v2(&self) -> Result<Vec<CanonicalCookie>, NetError> {
         let db_path = self
             .get_db_path()
-            .ok_or_else(|| CookieExtractionError::BrowserNotFound(format!("{:?}", self.browser)))?;
+            .ok_or_else(|| NetError::browser_not_found(format!("{:?}", self.browser)))?;
 
         if !db_path.exists() {
-            return Err(CookieExtractionError::DatabaseNotFound(db_path));
+            return Err(NetError::cookie_db_not_found(db_path.to_string_lossy()));
         }
 
         match self.browser {
@@ -418,7 +417,7 @@ impl BrowserCookieReader {
         super::safari::parse_binary_cookies(&data).map_err(|_| NetError::InvalidResponse)
     }
 
-    fn read_safari_cookies_v2(&self, path: &PathBuf) -> CookieResult<Vec<CanonicalCookie>> {
+    fn read_safari_cookies_v2(&self, path: &PathBuf) -> Result<Vec<CanonicalCookie>, NetError> {
         let data = std::fs::read(path)?;
         super::safari::parse_binary_cookies(&data)
     }
@@ -495,7 +494,7 @@ impl BrowserCookieReader {
         Ok(cookies)
     }
 
-    fn read_chromium_cookies_v2(&self, path: &PathBuf) -> CookieResult<Vec<CanonicalCookie>> {
+    fn read_chromium_cookies_v2(&self, path: &PathBuf) -> Result<Vec<CanonicalCookie>, NetError> {
         use rusqlite::{Connection, OpenFlags};
 
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
@@ -610,7 +609,7 @@ impl BrowserCookieReader {
         Ok(cookies)
     }
 
-    fn read_firefox_cookies_v2(&self, path: &PathBuf) -> CookieResult<Vec<CanonicalCookie>> {
+    fn read_firefox_cookies_v2(&self, path: &PathBuf) -> Result<Vec<CanonicalCookie>, NetError> {
         use rusqlite::{Connection, OpenFlags};
 
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
