@@ -54,7 +54,7 @@ impl HttpStream {
 /// HTTP/2 session cache for multiplexing.
 /// Stores active H2 senders by host:port key for reuse.
 struct H2SessionCache {
-    sessions: DashMap<String, H2Sender>,
+    sessions: DashMap<(String, u16), H2Sender>,
 }
 
 impl H2SessionCache {
@@ -65,11 +65,10 @@ impl H2SessionCache {
     }
 
     /// Get session key from URL
-    fn key(url: &Url) -> Option<String> {
-        Some(format!(
-            "{}:{}",
-            url.host_str()?,
-            url.port_or_known_default()?
+    fn key(url: &Url) -> Option<(String, u16)> {
+        Some((
+            url.host_str()?.to_string(),
+            url.port_or_known_default()?,
         ))
     }
 

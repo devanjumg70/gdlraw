@@ -167,6 +167,23 @@ impl HttpNetworkTransaction {
                             .map_err(|_| NetError::InvalidUrl)?;
                     }
 
+                    // Cookie header: Query the cookie store
+                    let cookies = self.cookie_store.get_cookies_for_url(&self.url);
+                    if !cookies.is_empty() {
+                        // Format cookies as "name=value; name2=value2"
+                        // Chromium sorts by path length (longest first) and creation time (oldest first).
+                        // get_cookies_for_url already returns them sorted correctly.
+                        let cookie_value = cookies
+                            .iter()
+                            .map(|c| format!("{}={}", c.name, c.value))
+                            .collect::<Vec<_>>()
+                            .join("; ");
+
+                        self.request_headers
+                            .insert("Cookie", &cookie_value)
+                            .map_err(|_| NetError::InvalidUrl)?;
+                    }
+
                     // Build request
                     let version = if is_h2 {
                         Version::HTTP_2
