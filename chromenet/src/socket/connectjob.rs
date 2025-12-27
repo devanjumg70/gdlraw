@@ -1,6 +1,6 @@
 use crate::base::context::IoResultExt;
 use crate::base::neterror::NetError;
-use crate::dns::{Name, Resolve, HickoryResolver};
+use crate::dns::{HickoryResolver, Name, Resolve};
 use crate::socket::stream::{BoxedSocket, StreamSocket};
 use crate::socket::tls::{TlsConfig, TlsOptions};
 use boring::ssl::{SslConnector, SslMethod};

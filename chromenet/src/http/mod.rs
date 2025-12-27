@@ -1,5 +1,5 @@
 pub mod digestauth;
-pub mod h2settings;
+pub mod h2fingerprint;
 pub mod orderedheaders;
 pub mod requestbody;
 pub mod response;
@@ -9,7 +9,7 @@ pub mod streamfactory;
 pub mod transaction;
 
 // Re-exports for convenience
-pub use h2settings::H2Settings;
+pub use h2fingerprint::H2Fingerprint;
 pub use requestbody::RequestBody;
 pub use response::HttpResponse;
 pub use responsebody::ResponseBody;

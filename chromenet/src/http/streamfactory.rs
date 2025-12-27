@@ -1,7 +1,14 @@
+//! HTTP Stream Factory
+//!
+//! Creates HTTP/1.1 and HTTP/2 streams for network transactions.
+//! Supports H2 multiplexing and browser fingerprint emulation.
+
 use crate::base::neterror::NetError;
+use crate::http::h2fingerprint::H2Fingerprint;
 use crate::socket::pool::{ClientSocketPool, PoolResult};
 use dashmap::DashMap;
 use http::{Request, Response};
+use http2::client::conn as h2_conn;
 use hyper::body::Incoming;
 use hyper::client::conn::http1;
 use hyper_util::rt::TokioIo;
@@ -9,10 +16,8 @@ use std::sync::Arc;
 use tokio::spawn;
 use url::Url;
 
-use hyper::client::conn::http2;
-
-/// Type alias for H2 sender
-type H2Sender = http2::SendRequest<http_body_util::Empty<bytes::Bytes>>;
+/// Type alias for H2 sender (using http2 crate's forked h2)
+type H2Sender = h2_conn::SendRequest<http_body_util::Empty<bytes::Bytes>>;
 
 /// Wraps the underlying protocol stream (H1/H2).
 pub struct HttpStream {
@@ -40,11 +45,11 @@ impl HttpStream {
     ) -> Result<Response<Incoming>, NetError> {
         match &mut self.inner {
             HttpStreamInner::H1(sender) => sender.send_request(req).await.map_err(|e| {
-                eprintln!("H1 Req error: {:?}", e);
+                tracing::debug!("H1 request error: {:?}", e);
                 NetError::ConnectionClosed
             }),
             HttpStreamInner::H2(sender) => sender.send_request(req).await.map_err(|e| {
-                eprintln!("H2 Req error: {:?}", e);
+                tracing::debug!("H2 request error: {:?}", e);
                 NetError::ConnectionClosed
             }),
         }
@@ -100,6 +105,10 @@ impl H2SessionCache {
     }
 }
 
+/// Factory for creating HTTP streams.
+///
+/// Manages connection pooling, H2 multiplexing, and applies
+/// browser fingerprint settings during H2 handshake.
 pub struct HttpStreamFactory {
     pool: Arc<ClientSocketPool>,
     h2_cache: H2SessionCache,
@@ -113,11 +122,15 @@ impl HttpStreamFactory {
         }
     }
 
+    /// Create an HTTP stream for the given URL.
+    ///
+    /// For HTTP/2, applies the fingerprint settings during handshake
+    /// including pseudo-header order, settings order, and priority frames.
     pub async fn create_stream(
         &self,
         url: &Url,
         proxy: Option<&crate::socket::proxy::ProxySettings>,
-        h2_settings: Option<&crate::http::H2Settings>,
+        h2_fingerprint: Option<&H2Fingerprint>,
     ) -> Result<HttpStream, NetError> {
         // 1. Check H2 session cache for multiplexing (if HTTPS/H2)
         if url.scheme() == "https" {
@@ -136,28 +149,88 @@ impl HttpStreamFactory {
         let io = TokioIo::new(pool_result.socket);
 
         if pool_result.is_h2 {
-            // H2 Handshake with optional fingerprinting settings
-            let settings = h2_settings.copied().unwrap_or_default();
+            // H2 Handshake with fingerprint emulation
+            let fp = h2_fingerprint.cloned().unwrap_or_default();
 
-            let (sender, conn) = http2::Builder::new(io::TokioExecutor::new())
-                .initial_stream_window_size(settings.initial_window_size)
-                .initial_connection_window_size(settings.initial_window_size)
-                .max_frame_size(settings.max_frame_size)
-                .max_concurrent_streams(settings.max_concurrent_streams)
-                .max_header_list_size(settings.max_header_list_size)
+            // Build http2 connection with fingerprint settings
+            let mut builder = h2_conn::Builder::new(io::TokioExecutor::new());
+
+            // Apply window sizes
+            builder.initial_stream_window_size(fp.initial_window_size);
+            builder.initial_connection_window_size(fp.initial_conn_window_size);
+
+            // Apply frame limits
+            if let Some(max_frame_size) = fp.max_frame_size {
+                builder.max_frame_size(max_frame_size);
+            }
+            if let Some(max_concurrent) = fp.max_concurrent_streams {
+                builder.max_concurrent_streams(max_concurrent);
+            }
+            if let Some(max_header_list_size) = fp.max_header_list_size {
+                builder.max_header_list_size(max_header_list_size);
+            }
+            if let Some(header_table_size) = fp.header_table_size {
+                builder.header_table_size(header_table_size);
+            }
+
+            // Apply fingerprint emulation options
+            if let Some(ref pseudo_order) = fp.pseudo_order {
+                builder.headers_pseudo_order(pseudo_order.clone());
+            }
+            if let Some(ref settings_order) = fp.settings_order {
+                builder.settings_order(settings_order.clone());
+            }
+            if let Some(ref priorities) = fp.priorities {
+                builder.priorities(priorities.clone());
+            }
+            if let Some(ref stream_dep) = fp.stream_dependency {
+                builder.headers_stream_dependency(stream_dep.clone());
+            }
+            if let Some(ref experimental) = fp.experimental_settings {
+                builder.experimental_settings(experimental.clone());
+            }
+
+            // Apply push/connect protocol settings
+            if let Some(enable_push) = fp.enable_push {
+                builder.enable_push(enable_push);
+            }
+            if let Some(enable_connect) = fp.enable_connect_protocol {
+                builder.enable_connect_protocol(enable_connect);
+            }
+            if let Some(no_priorities) = fp.no_rfc7540_priorities {
+                builder.no_rfc7540_priorities(no_priorities);
+            }
+
+            // Apply keep-alive settings
+            if let Some(interval) = fp.keep_alive_interval {
+                builder.keep_alive_interval(interval);
+            }
+            if let Some(timeout) = fp.keep_alive_timeout {
+                builder.keep_alive_timeout(timeout);
+            }
+            builder.keep_alive_while_idle(fp.keep_alive_while_idle);
+
+            // Apply adaptive window
+            if fp.adaptive_window {
+                builder.adaptive_window(true);
+            }
+
+            // Perform handshake
+            let (sender, conn) = builder
                 .handshake::<_, http_body_util::Empty<bytes::Bytes>>(io)
                 .await
                 .map_err(|e| {
-                    eprintln!("H2 Handshake failed: {:?}", e);
+                    tracing::debug!("H2 handshake failed: {:?}", e);
                     NetError::ConnectionFailed
                 })?;
 
             // Store sender in cache for multiplexing
             self.h2_cache.store(url, sender.clone());
 
+            // Spawn connection driver
             spawn(async move {
                 if let Err(e) = conn.await {
-                    eprintln!("H2 Connection failed: {:?}", e);
+                    tracing::debug!("H2 connection error: {:?}", e);
                 }
             });
 
@@ -173,7 +246,7 @@ impl HttpStreamFactory {
 
             spawn(async move {
                 if let Err(e) = conn.await {
-                    eprintln!("H1 Connection failed: {:?}", e);
+                    tracing::debug!("H1 connection error: {:?}", e);
                 }
             });
 
@@ -191,7 +264,7 @@ impl HttpStreamFactory {
 
 // Helper for H2 executor
 mod io {
-    use hyper::rt::Executor;
+    use http2::rt::Executor;
     use std::future::Future;
 
     #[derive(Clone)]

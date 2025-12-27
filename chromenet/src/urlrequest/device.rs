@@ -1,4 +1,4 @@
-use crate::http::H2Settings;
+use crate::http::H2Fingerprint;
 use crate::socket::tls::impersonate::ImpersonateTarget;
 
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub struct Device {
     pub user_agent_metadata: Option<UserAgentMetadata>,
     pub screen: Screen,
     pub capabilities: &'static [&'static str], // e.g., "touch", "mobile"
-    pub h2_settings: Option<H2Settings>,
+    pub h2_fingerprint: Option<H2Fingerprint>,
     pub impersonate: ImpersonateTarget,
 }
 
@@ -117,7 +117,7 @@ impl DeviceRegistry {
                     vertical: Orientation { width: 390, height: 844 },
                 },
                 capabilities: &["touch", "mobile"],
-                h2_settings: None,
+                h2_fingerprint: None,
                 impersonate: ImpersonateTarget::Safari17, // Approximation
             },
             // Pixel 7
@@ -139,7 +139,7 @@ impl DeviceRegistry {
                     vertical: Orientation { width: 412, height: 915 },
                 },
                 capabilities: &["touch", "mobile"],
-                h2_settings: None,
+                h2_fingerprint: None,
                 impersonate: ImpersonateTarget::Chrome124,
             },
             // Samsung Galaxy S8+
@@ -161,7 +161,7 @@ impl DeviceRegistry {
                     vertical: Orientation { width: 360, height: 740 },
                 },
                 capabilities: &["touch", "mobile"],
-                h2_settings: None,
+                h2_fingerprint: None,
                 impersonate: ImpersonateTarget::Chrome124, // Use modern Chrome for better compat
             },
         ])

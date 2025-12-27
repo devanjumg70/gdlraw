@@ -3,7 +3,7 @@ use crate::base::neterror::NetError;
 use crate::http::orderedheaders::OrderedHeaderMap;
 use crate::http::retry::{calculate_backoff, RetryConfig, RetryReason};
 use crate::http::streamfactory::{HttpStream, HttpStreamFactory};
-use crate::http::H2Settings;
+use crate::http::H2Fingerprint;
 use http::{Request, Response, Version};
 use hyper::body::Incoming;
 use std::sync::Arc;
@@ -43,7 +43,7 @@ pub struct HttpNetworkTransaction {
     response: Option<Response<Incoming>>,
     request_headers: OrderedHeaderMap,
     device: Option<Device>,
-    h2_settings: Option<H2Settings>,
+    h2_fingerprint: Option<H2Fingerprint>,
     cookie_store: Arc<CookieMonster>,
     proxy_settings: Option<crate::socket::proxy::ProxySettings>,
     retry_config: RetryConfig,
@@ -64,7 +64,7 @@ impl HttpNetworkTransaction {
             response: None,
             request_headers: OrderedHeaderMap::default(),
             device: None,
-            h2_settings: None,
+            h2_fingerprint: None,
             cookie_store,
             proxy_settings: None,
             retry_config: RetryConfig::default(),
@@ -90,9 +90,9 @@ impl HttpNetworkTransaction {
         self.proxy_settings = Some(proxy);
     }
 
-    /// Set HTTP/2 SETTINGS for fingerprinting.
-    pub fn set_h2_settings(&mut self, settings: H2Settings) {
-        self.h2_settings = Some(settings);
+    /// Set HTTP/2 fingerprint for browser emulation.
+    pub fn set_h2_fingerprint(&mut self, fingerprint: H2Fingerprint) {
+        self.h2_fingerprint = Some(fingerprint);
     }
 
     pub fn set_headers(&mut self, headers: OrderedHeaderMap) {
@@ -150,7 +150,7 @@ impl HttpNetworkTransaction {
                             .create_stream(
                                 &self.url,
                                 self.proxy_settings.as_ref(),
-                                self.h2_settings.as_ref(),
+                                self.h2_fingerprint.as_ref(),
                             )
                             .await?,
                     );

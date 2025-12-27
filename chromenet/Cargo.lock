@@ -356,10 +356,10 @@ dependencies = [
  "criterion",
  "dashmap",
  "foreign-types 0.3.2",
- "h2",
  "hickory-resolver",
  "http",
  "http-body-util",
+ "http2",
  "hyper",
  "hyper-util",
  "psl",
@@ -368,6 +368,7 @@ dependencies = [
  "security-framework",
  "serde",
  "serde_json",
+ "static_vcruntime",
  "tempfile",
  "thiserror 1.0.69",
  "time",
@@ -1153,6 +1154,25 @@ dependencies = [
  "http",
  "http-body",
  "pin-project-lite",
+]
+
+[[package]]
+name = "http2"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8854d9f2c2059a1e600d7db31b8cfcd3033afac9b63cf99ca46fb1c337d39133"
+dependencies = [
+ "atomic-waker",
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "http",
+ "indexmap",
+ "slab",
+ "smallvec",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -2213,6 +2233,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "static_vcruntime"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "954e3e877803def9dc46075bf4060147c55cd70db97873077232eae0269dc89b"
 
 [[package]]
 name = "subtle"
