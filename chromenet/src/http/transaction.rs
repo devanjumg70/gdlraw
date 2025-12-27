@@ -2,10 +2,9 @@ use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
 use crate::http::orderedheaders::OrderedHeaderMap;
 use crate::http::retry::{calculate_backoff, RetryConfig, RetryReason};
-use crate::http::streamfactory::{HttpStream, HttpStreamFactory};
+use crate::http::streamfactory::{HttpStream, HttpStreamFactory, StreamBody};
 use crate::http::H2Fingerprint;
 use http::{Request, Response, Version};
-use hyper::body::Incoming;
 use std::sync::Arc;
 use url::Url;
 
@@ -40,7 +39,7 @@ pub struct HttpNetworkTransaction {
     url: Url,
     state: State,
     stream: Option<HttpStream>,
-    response: Option<Response<Incoming>>,
+    response: Option<Response<StreamBody>>,
     request_headers: OrderedHeaderMap,
     device: Option<Device>,
     h2_fingerprint: Option<H2Fingerprint>,
@@ -240,7 +239,7 @@ impl HttpNetworkTransaction {
         }
     }
 
-    pub fn get_response(&mut self) -> Option<&Response<Incoming>> {
+    pub fn get_response(&mut self) -> Option<&Response<StreamBody>> {
         self.response.as_ref()
     }
 
@@ -249,6 +248,6 @@ impl HttpNetworkTransaction {
     pub fn take_response(&mut self) -> Option<crate::http::response::HttpResponse> {
         self.response
             .take()
-            .map(crate::http::response::HttpResponse::from_hyper)
+            .map(crate::http::response::HttpResponse::from_stream_response)
     }
 }

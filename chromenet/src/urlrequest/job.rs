@@ -1,10 +1,9 @@
 use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
-use crate::http::streamfactory::HttpStreamFactory;
+use crate::http::streamfactory::{HttpStreamFactory, StreamBody};
 use crate::http::transaction::HttpNetworkTransaction;
 use crate::http::RequestBody;
 use http::{Method, Response};
-use hyper::body::Incoming;
 use std::collections::HashSet;
 use std::sync::Arc;
 use url::Url;
@@ -177,7 +176,7 @@ impl URLRequestHttpJob {
         Ok(())
     }
 
-    pub fn get_response(&mut self) -> Option<&Response<Incoming>> {
+    pub fn get_response(&mut self) -> Option<&Response<StreamBody>> {
         self.transaction.get_response()
     }
 

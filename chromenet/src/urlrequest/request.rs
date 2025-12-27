@@ -1,10 +1,9 @@
 use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
 use crate::cookies::monster::CookieMonster;
-use crate::http::streamfactory::HttpStreamFactory;
+use crate::http::streamfactory::{HttpStreamFactory, StreamBody};
 use crate::socket::pool::ClientSocketPool;
 use crate::urlrequest::job::URLRequestHttpJob;
-use hyper::body::Incoming;
 use std::sync::{Arc, OnceLock};
 use url::Url;
 
@@ -59,7 +58,7 @@ impl URLRequest {
     }
 
     /// Get the response reference.
-    pub fn get_response(&mut self) -> Option<&http::Response<Incoming>> {
+    pub fn get_response(&mut self) -> Option<&http::Response<StreamBody>> {
         self.job.get_response()
     }
 

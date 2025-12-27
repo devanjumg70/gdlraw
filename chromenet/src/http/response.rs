@@ -1,5 +1,6 @@
 //! HTTP Response with body access.
 
+use crate::http::streamfactory::StreamBody;
 use crate::http::ResponseBody;
 use http::{HeaderMap, StatusCode, Version};
 use hyper::body::Incoming;
@@ -22,6 +23,17 @@ impl HttpResponse {
             version: parts.version,
             headers: parts.headers,
             body: Some(ResponseBody::new(body)),
+        }
+    }
+
+    /// Create from Response<StreamBody> (abstraction over H1/H2).
+    pub fn from_stream_response(resp: http::Response<StreamBody>) -> Self {
+        let (parts, stream_body) = resp.into_parts();
+        Self {
+            status: parts.status,
+            version: parts.version,
+            headers: parts.headers,
+            body: Some(ResponseBody::from_stream(stream_body)),
         }
     }
 

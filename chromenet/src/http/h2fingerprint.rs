@@ -243,87 +243,87 @@ impl H2FingerprintBuilder {
 
 fn chrome_pseudo_order() -> PseudoOrder {
     // Chrome: :method, :authority, :scheme, :path
-    PseudoOrder::new([
-        PseudoId::Method,
-        PseudoId::Authority,
-        PseudoId::Scheme,
-        PseudoId::Path,
-    ])
+    PseudoOrder::builder()
+        .push(PseudoId::Method)
+        .push(PseudoId::Authority)
+        .push(PseudoId::Scheme)
+        .push(PseudoId::Path)
+        .build()
 }
 
 fn firefox_pseudo_order() -> PseudoOrder {
     // Firefox: :method, :path, :authority, :scheme
-    PseudoOrder::new([
-        PseudoId::Method,
-        PseudoId::Path,
-        PseudoId::Authority,
-        PseudoId::Scheme,
-    ])
+    PseudoOrder::builder()
+        .push(PseudoId::Method)
+        .push(PseudoId::Path)
+        .push(PseudoId::Authority)
+        .push(PseudoId::Scheme)
+        .build()
 }
 
 fn safari_pseudo_order() -> PseudoOrder {
     // Safari: :method, :scheme, :path, :authority
-    PseudoOrder::new([
-        PseudoId::Method,
-        PseudoId::Scheme,
-        PseudoId::Path,
-        PseudoId::Authority,
-    ])
+    PseudoOrder::builder()
+        .push(PseudoId::Method)
+        .push(PseudoId::Scheme)
+        .push(PseudoId::Path)
+        .push(PseudoId::Authority)
+        .build()
 }
 
 fn chrome_settings_order() -> SettingsOrder {
     // Chrome SETTINGS order
-    SettingsOrderBuilder::new()
-        .header_table_size()
-        .enable_push()
-        .max_concurrent_streams()
-        .initial_window_size()
-        .max_frame_size()
-        .max_header_list_size()
+    SettingsOrder::builder()
+        .push(SettingId::HeaderTableSize)
+        .push(SettingId::EnablePush)
+        .push(SettingId::MaxConcurrentStreams)
+        .push(SettingId::InitialWindowSize)
+        .push(SettingId::MaxFrameSize)
+        .push(SettingId::MaxHeaderListSize)
         .build()
 }
 
 fn firefox_settings_order() -> SettingsOrder {
     // Firefox SETTINGS order (different from Chrome)
-    SettingsOrderBuilder::new()
-        .header_table_size()
-        .initial_window_size()
-        .max_frame_size()
+    SettingsOrder::builder()
+        .push(SettingId::HeaderTableSize)
+        .push(SettingId::InitialWindowSize)
+        .push(SettingId::MaxFrameSize)
         .build()
 }
 
 fn safari_settings_order() -> SettingsOrder {
     // Safari SETTINGS order
-    SettingsOrderBuilder::new()
-        .enable_push()
-        .initial_window_size()
-        .header_table_size()
-        .max_concurrent_streams()
-        .max_frame_size()
+    SettingsOrder::builder()
+        .push(SettingId::EnablePush)
+        .push(SettingId::InitialWindowSize)
+        .push(SettingId::HeaderTableSize)
+        .push(SettingId::MaxConcurrentStreams)
+        .push(SettingId::MaxFrameSize)
         .build()
 }
 
 fn chrome_priorities() -> Priorities {
     // Chrome sends these PRIORITY frames after handshake
     // This creates a priority tree for resource scheduling
-    PrioritiesBuilder::new()
-        .priority(Priority::new(
+    Priorities::builder()
+        .push(Priority::new(
             3.into(),
             StreamDependency::new(0.into(), 200, false),
         ))
-        .priority(Priority::new(
+        .push(Priority::new(
             5.into(),
             StreamDependency::new(0.into(), 100, false),
         ))
-        .priority(Priority::new(
+        .push(Priority::new(
             7.into(),
             StreamDependency::new(0.into(), 0, false),
         ))
-        .priority(Priority::new(
+        .push(Priority::new(
             9.into(),
             StreamDependency::new(7.into(), 0, false),
         ))
-        .priority(Priority::new(
+        .push(Priority::new(
             11.into(),
             StreamDependency::new(3.into(), 0, false),
         ))

@@ -87,3 +87,45 @@ impl AsyncWrite for BoxedSocket {
 
 // BoxedSocket is Unpin because it's a wrapper that handles pinning internally
 impl Unpin for BoxedSocket {}
+
+// Implement hyper::rt::Read and hyper::rt::Write for BoxedSocket
+// This allows http2 crate to use BoxedSocket directly
+impl hyper::rt::Read for BoxedSocket {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        mut buf: hyper::rt::ReadBufCursor<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        // SAFETY: We're using the hyper ReadBufCursor correctly
+        let unfilled = unsafe { buf.as_mut() };
+        let mut read_buf = ReadBuf::uninit(unfilled);
+        // Disambiguate by calling tokio AsyncRead directly
+        match AsyncRead::poll_read(self.as_mut(), cx, &mut read_buf) {
+            Poll::Ready(Ok(())) => {
+                let n = read_buf.filled().len();
+                unsafe { buf.advance(n) };
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl hyper::rt::Write for BoxedSocket {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        <Self as AsyncWrite>::poll_write(self, cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        <Self as AsyncWrite>::poll_flush(self, cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        <Self as AsyncWrite>::poll_shutdown(self, cx)
+    }
+}

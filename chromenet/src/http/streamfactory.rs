@@ -23,7 +23,7 @@ use url::Url;
 type H2Sender = client::SendRequest<Bytes>;
 
 /// HTTP response body enum that abstracts over H1 and H2 body types
-pub enum ResponseBody {
+pub enum StreamBody {
     H1(Incoming),
     H2(RecvStream),
 }
@@ -55,18 +55,21 @@ impl HttpStream {
     pub async fn send_request(
         &mut self,
         req: Request<http_body_util::Empty<bytes::Bytes>>,
-    ) -> Result<Response<ResponseBody>, NetError> {
+    ) -> Result<Response<StreamBody>, NetError> {
         match &mut self.inner {
             HttpStreamInner::H1(sender) => {
                 let resp = sender.send_request(req).await.map_err(|e| {
                     tracing::debug!("H1 request error: {:?}", e);
                     NetError::ConnectionClosed
                 })?;
-                Ok(resp.map(ResponseBody::H1))
+                Ok(resp.map(StreamBody::H1))
             }
             HttpStreamInner::H2(sender) => {
-                // Wait for the connection to be ready
-                sender.ready().await.map_err(|e| {
+                // Clone sender because ready() consumes it
+                let sender = sender.clone();
+
+                // Wait for the connection to be ready - ready() returns ReadySendRequest
+                let mut ready_sender = sender.ready().await.map_err(|e| {
                     tracing::debug!("H2 ready error: {:?}", e);
                     NetError::ConnectionFailed
                 })?;
@@ -76,9 +79,8 @@ impl HttpStream {
                 let req_h2 = Request::from_parts(parts, ());
 
                 // Send request with end_of_stream=true (no body)
-                let (response_fut, _send_stream) = sender
-                    .send_request(req_h2, true)
-                    .map_err(|e| {
+                let (response_fut, _send_stream) =
+                    ready_sender.send_request(req_h2, true).map_err(|e| {
                         tracing::debug!("H2 send_request error: {:?}", e);
                         NetError::ConnectionFailed
                     })?;
@@ -91,7 +93,7 @@ impl HttpStream {
 
                 // Convert to our response type
                 let (parts, recv_stream) = resp.into_parts();
-                Ok(Response::from_parts(parts, ResponseBody::H2(recv_stream)))
+                Ok(Response::from_parts(parts, StreamBody::H2(recv_stream)))
             }
         }
     }
@@ -238,13 +240,10 @@ impl HttpStreamFactory {
             }
 
             // Perform handshake with Bytes body type
-            let (sender, conn) = builder
-                .handshake::<_, Bytes>(io)
-                .await
-                .map_err(|e| {
-                    tracing::debug!("H2 handshake failed: {:?}", e);
-                    NetError::ConnectionFailed
-                })?;
+            let (sender, conn) = builder.handshake::<_, Bytes>(io).await.map_err(|e| {
+                tracing::debug!("H2 handshake failed: {:?}", e);
+                NetError::ConnectionFailed
+            })?;
 
             // Store sender in cache for multiplexing
             self.h2_cache.store(url, sender.clone());

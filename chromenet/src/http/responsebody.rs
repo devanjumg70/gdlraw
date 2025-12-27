@@ -2,29 +2,53 @@
 //! Mirrors Chromium's HttpStream::ReadResponseBody.
 
 use crate::base::neterror::NetError;
+use crate::http::streamfactory::StreamBody;
 use bytes::Bytes;
+use http2::RecvStream;
 use hyper::body::Incoming;
 
 /// Response body wrapper for streaming.
-pub struct ResponseBody {
-    inner: Incoming,
+/// Supports both HTTP/1.1 (hyper Incoming) and HTTP/2 (http2 RecvStream).
+pub enum ResponseBody {
+    H1(Incoming),
+    H2(RecvStream),
 }
 
 impl ResponseBody {
-    /// Create a new response body wrapper.
+    /// Create a new response body wrapper from hyper Incoming.
     pub fn new(inner: Incoming) -> Self {
-        Self { inner }
+        ResponseBody::H1(inner)
+    }
+
+    /// Create from StreamBody enum.
+    pub fn from_stream(stream: StreamBody) -> Self {
+        match stream {
+            StreamBody::H1(incoming) => ResponseBody::H1(incoming),
+            StreamBody::H2(recv) => ResponseBody::H2(recv),
+        }
     }
 
     /// Read entire body as bytes.
     pub async fn bytes(self) -> Result<Bytes, NetError> {
-        use http_body_util::BodyExt;
-        let collected = self
-            .inner
-            .collect()
-            .await
-            .map_err(|_| NetError::HttpBodyError)?;
-        Ok(collected.to_bytes())
+        match self {
+            ResponseBody::H1(incoming) => {
+                use http_body_util::BodyExt;
+                let collected = incoming
+                    .collect()
+                    .await
+                    .map_err(|_| NetError::HttpBodyError)?;
+                Ok(collected.to_bytes())
+            }
+            ResponseBody::H2(mut recv_stream) => {
+                use bytes::BufMut;
+                let mut data = bytes::BytesMut::new();
+                while let Some(chunk) = recv_stream.data().await {
+                    let chunk = chunk.map_err(|_| NetError::HttpBodyError)?;
+                    data.put(chunk);
+                }
+                Ok(data.freeze())
+            }
+        }
     }
 
     /// Read body as UTF-8 string.
@@ -37,10 +61,5 @@ impl ResponseBody {
     pub async fn json<T: serde::de::DeserializeOwned>(self) -> Result<T, NetError> {
         let bytes = self.bytes().await?;
         serde_json::from_slice(&bytes).map_err(|_| NetError::JsonParseError)
-    }
-
-    /// Get the inner Incoming body for low-level access.
-    pub fn into_inner(self) -> Incoming {
-        self.inner
     }
 }
