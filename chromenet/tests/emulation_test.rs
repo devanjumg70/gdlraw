@@ -171,3 +171,130 @@ fn test_h2_options_builder() {
     assert_eq!(opts.header_table_size, Some(65536));
     assert_eq!(opts.enable_push, Some(false));
 }
+
+// === Firefox Profile Tests ===
+
+#[test]
+fn test_firefox_default() {
+    use chromenet::emulation::profiles::Firefox;
+    assert_eq!(Firefox::default(), Firefox::V145);
+}
+
+#[test]
+fn test_firefox_emulation() {
+    use chromenet::emulation::profiles::Firefox;
+    let emu = Firefox::V145.emulation();
+
+    // Firefox should have TLS without GREASE
+    assert!(emu.tls_options().is_some());
+    let tls = emu.tls_options().unwrap();
+    assert_eq!(tls.grease_enabled, Some(false));
+
+    // Should have H2 with smaller window size than Chrome
+    assert!(emu.http2_options().is_some());
+    let h2 = emu.http2_options().unwrap();
+    assert_eq!(h2.initial_window_size, Some(131072));
+
+    // Should have headers
+    assert!(!emu.headers().is_empty());
+}
+
+#[test]
+fn test_all_firefox_versions() {
+    use chromenet::emulation::profiles::Firefox;
+    let versions = [
+        Firefox::V128,
+        Firefox::V133,
+        Firefox::V135,
+        Firefox::V140,
+        Firefox::V145,
+    ];
+
+    for v in versions {
+        let emu = v.emulation();
+        assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
+        assert!(emu.http2_options().is_some(), "{:?} missing H2", v);
+        assert!(!emu.headers().is_empty(), "{:?} missing headers", v);
+    }
+}
+
+// === Safari Profile Tests ===
+
+#[test]
+fn test_safari_default() {
+    use chromenet::emulation::profiles::Safari;
+    assert_eq!(Safari::default(), Safari::V18_2);
+}
+
+#[test]
+fn test_safari_emulation() {
+    use chromenet::emulation::profiles::Safari;
+    let emu = Safari::V18.emulation();
+
+    // Safari should have TLS without GREASE
+    assert!(emu.tls_options().is_some());
+    let tls = emu.tls_options().unwrap();
+    assert_eq!(tls.grease_enabled, Some(false));
+
+    // Should have H2 with 4MB window
+    assert!(emu.http2_options().is_some());
+    let h2 = emu.http2_options().unwrap();
+    assert_eq!(h2.initial_window_size, Some(4194304));
+
+    assert!(!emu.headers().is_empty());
+}
+
+#[test]
+fn test_all_safari_versions() {
+    use chromenet::emulation::profiles::Safari;
+    let versions = [
+        Safari::V17,
+        Safari::V17_5,
+        Safari::V18,
+        Safari::V18_2,
+        Safari::IOS17,
+        Safari::IOS18,
+    ];
+
+    for v in versions {
+        let emu = v.emulation();
+        assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
+        assert!(!emu.headers().is_empty(), "{:?} missing headers", v);
+    }
+}
+
+// === Edge Profile Tests ===
+
+#[test]
+fn test_edge_default() {
+    use chromenet::emulation::profiles::Edge;
+    assert_eq!(Edge::default(), Edge::V140);
+}
+
+#[test]
+fn test_edge_emulation() {
+    use chromenet::emulation::profiles::Edge;
+    let emu = Edge::V140.emulation();
+
+    // Edge is Chromium-based, should have GREASE
+    assert!(emu.tls_options().is_some());
+    let tls = emu.tls_options().unwrap();
+    assert!(tls.grease_enabled.unwrap_or(false));
+
+    // Should have headers with Edge branding
+    assert!(!emu.headers().is_empty());
+    let ua = emu.headers().get(http::header::USER_AGENT).unwrap();
+    assert!(ua.to_str().unwrap().contains("Edg/"));
+}
+
+#[test]
+fn test_all_edge_versions() {
+    use chromenet::emulation::profiles::Edge;
+    let versions = [Edge::V120, Edge::V131, Edge::V135, Edge::V140];
+
+    for v in versions {
+        let emu = v.emulation();
+        assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
+        assert!(!emu.headers().is_empty(), "{:?} missing headers", v);
+    }
+}
