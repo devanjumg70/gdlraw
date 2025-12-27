@@ -93,12 +93,12 @@ fn test_emulation_factory_from_h2() {
 
 #[test]
 fn test_chrome_default_is_latest() {
-    assert_eq!(Chrome::default(), Chrome::V140);
+    assert_eq!(Chrome::default(), Chrome::V143);
 }
 
 #[test]
-fn test_chrome_v140_emulation() {
-    let emu = Chrome::V140.emulation();
+fn test_chrome_latest_emulation() {
+    let emu = Chrome::V143.emulation();
 
     // Should have TLS options
     assert!(emu.tls_options().is_some());
@@ -115,16 +115,8 @@ fn test_chrome_v140_emulation() {
 
 #[test]
 fn test_all_chrome_versions_valid() {
-    let versions = [
-        Chrome::V120,
-        Chrome::V124,
-        Chrome::V128,
-        Chrome::V131,
-        Chrome::V135,
-        Chrome::V140,
-    ];
-
-    for version in versions {
+    // Use all_versions() to test all profiles
+    for version in Chrome::all_versions() {
         let emu = version.emulation();
         assert!(
             emu.tls_options().is_some(),
@@ -202,15 +194,7 @@ fn test_firefox_emulation() {
 #[test]
 fn test_all_firefox_versions() {
     use chromenet::emulation::profiles::Firefox;
-    let versions = [
-        Firefox::V128,
-        Firefox::V133,
-        Firefox::V135,
-        Firefox::V140,
-        Firefox::V145,
-    ];
-
-    for v in versions {
+    for v in Firefox::all_versions() {
         let emu = v.emulation();
         assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
         assert!(emu.http2_options().is_some(), "{:?} missing H2", v);
@@ -223,7 +207,7 @@ fn test_all_firefox_versions() {
 #[test]
 fn test_safari_default() {
     use chromenet::emulation::profiles::Safari;
-    assert_eq!(Safari::default(), Safari::V18_2);
+    assert_eq!(Safari::default(), Safari::V18_5);
 }
 
 #[test]
@@ -247,16 +231,7 @@ fn test_safari_emulation() {
 #[test]
 fn test_all_safari_versions() {
     use chromenet::emulation::profiles::Safari;
-    let versions = [
-        Safari::V17,
-        Safari::V17_5,
-        Safari::V18,
-        Safari::V18_2,
-        Safari::IOS17,
-        Safari::IOS18,
-    ];
-
-    for v in versions {
+    for v in Safari::all_versions() {
         let emu = v.emulation();
         assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
         assert!(!emu.headers().is_empty(), "{:?} missing headers", v);
@@ -268,13 +243,13 @@ fn test_all_safari_versions() {
 #[test]
 fn test_edge_default() {
     use chromenet::emulation::profiles::Edge;
-    assert_eq!(Edge::default(), Edge::V140);
+    assert_eq!(Edge::default(), Edge::V142);
 }
 
 #[test]
 fn test_edge_emulation() {
     use chromenet::emulation::profiles::Edge;
-    let emu = Edge::V140.emulation();
+    let emu = Edge::V142.emulation();
 
     // Edge is Chromium-based, should have GREASE
     assert!(emu.tls_options().is_some());
@@ -290,9 +265,7 @@ fn test_edge_emulation() {
 #[test]
 fn test_all_edge_versions() {
     use chromenet::emulation::profiles::Edge;
-    let versions = [Edge::V120, Edge::V131, Edge::V135, Edge::V140];
-
-    for v in versions {
+    for v in Edge::all_versions() {
         let emu = v.emulation();
         assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
         assert!(!emu.headers().is_empty(), "{:?} missing headers", v);

@@ -71,6 +71,7 @@ impl ProxySettings {
         match self.url.scheme() {
             "https" => ProxyType::Https,
             "socks5" | "socks5h" => ProxyType::Socks5,
+            "socks4" | "socks4a" => ProxyType::Socks5, // Treat as SOCKS
             _ => ProxyType::Http,
         }
     }
@@ -80,7 +81,7 @@ impl ProxySettings {
         self.bypass.should_bypass_url(target)
     }
 
-    /// Get `Proxy-Authorization` header value.
+    /// Get `Proxy-Authorization` header value for HTTP proxies.
     pub fn get_auth_header(&self) -> Option<String> {
         if let (Some(u), Some(p)) = (&self.username, &self.password) {
             use base64::{engine::general_purpose, Engine as _};
@@ -90,6 +91,26 @@ impl ProxySettings {
         } else {
             None
         }
+    }
+
+    /// Get SOCKS5 username/password for authentication.
+    ///
+    /// Returns (username, password) tuple for SOCKS5 auth.
+    pub fn get_socks5_auth(&self) -> Option<(&str, &str)> {
+        match (&self.username, &self.password) {
+            (Some(u), Some(p)) => Some((u.as_str(), p.as_str())),
+            _ => None,
+        }
+    }
+
+    /// Check if this proxy requires authentication.
+    pub fn requires_auth(&self) -> bool {
+        self.username.is_some() && self.password.is_some()
+    }
+
+    /// Check if this is a SOCKS proxy.
+    pub fn is_socks(&self) -> bool {
+        matches!(self.proxy_type(), ProxyType::Socks5)
     }
 
     /// Get proxy host and port.
@@ -168,5 +189,92 @@ impl ProxyBuilder {
             password: self.password.map(Zeroizing::new),
             bypass,
         })
+    }
+}
+
+/// Proxy rotation pool.
+///
+/// Selects proxies using round-robin or random selection.
+pub struct ProxyPool {
+    proxies: Vec<ProxySettings>,
+    index: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    strategy: RotationStrategy,
+}
+
+/// Proxy rotation strategy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RotationStrategy {
+    /// Round-robin selection.
+    RoundRobin,
+    /// Random selection.
+    Random,
+}
+
+impl Default for RotationStrategy {
+    fn default() -> Self {
+        RotationStrategy::RoundRobin
+    }
+}
+
+impl ProxyPool {
+    /// Create a new proxy pool with round-robin rotation.
+    pub fn new(proxies: Vec<ProxySettings>) -> Self {
+        Self {
+            proxies,
+            index: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            strategy: RotationStrategy::RoundRobin,
+        }
+    }
+
+    /// Create with specific rotation strategy.
+    pub fn with_strategy(mut self, strategy: RotationStrategy) -> Self {
+        self.strategy = strategy;
+        self
+    }
+
+    /// Get next proxy using the configured rotation strategy.
+    pub fn next(&self) -> Option<&ProxySettings> {
+        if self.proxies.is_empty() {
+            return None;
+        }
+
+        match self.strategy {
+            RotationStrategy::RoundRobin => {
+                let idx = self.index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Some(&self.proxies[idx % self.proxies.len()])
+            }
+            RotationStrategy::Random => {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let seed = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos() as usize;
+                Some(&self.proxies[seed % self.proxies.len()])
+            }
+        }
+    }
+
+    /// Get proxy for a specific target URL (respects bypass rules).
+    pub fn get_for(&self, target: &Url) -> Option<&ProxySettings> {
+        self.next().filter(|p| !p.should_bypass(target))
+    }
+
+    /// Number of proxies in the pool.
+    pub fn len(&self) -> usize {
+        self.proxies.len()
+    }
+
+    /// Check if pool is empty.
+    pub fn is_empty(&self) -> bool {
+        self.proxies.is_empty()
+    }
+}
+
+impl std::fmt::Debug for ProxyPool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxyPool")
+            .field("count", &self.proxies.len())
+            .field("strategy", &self.strategy)
+            .finish()
     }
 }

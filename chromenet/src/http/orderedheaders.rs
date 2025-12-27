@@ -147,3 +147,167 @@ mod tests {
         assert!(cloned.get("Test").is_some());
     }
 }
+
+/// Case-sensitive header map for HTTP/1.1.
+///
+/// Preserves original header casing for fingerprinting.
+/// HTTP/1.1 headers are case-insensitive per spec, but some
+/// servers and fingerprinting detectors check exact casing.
+#[derive(Debug, Clone, Default)]
+pub struct CaseSensitiveHeaders {
+    /// Headers as (original_name, value) pairs
+    headers: Vec<(String, String)>,
+}
+
+impl CaseSensitiveHeaders {
+    /// Create a new case-sensitive header map.
+    pub fn new() -> Self {
+        Self {
+            headers: Vec::new(),
+        }
+    }
+
+    /// Insert header with preserved casing.
+    pub fn insert(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        let name = name.into();
+        let value = value.into();
+
+        // Update existing (case-insensitive match)
+        if let Some((_, v)) = self
+            .headers
+            .iter_mut()
+            .find(|(n, _)| n.eq_ignore_ascii_case(&name))
+        {
+            *v = value;
+        } else {
+            self.headers.push((name, value));
+        }
+    }
+
+    /// Get header value (case-insensitive lookup).
+    pub fn get(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// Convert to title case (e.g., "content-type" -> "Content-Type").
+    pub fn as_title_case(&self) -> impl Iterator<Item = (String, &str)> + '_ {
+        self.headers.iter().map(|(n, v)| {
+            let title = n
+                .split('-')
+                .map(|word| {
+                    let mut chars: Vec<char> = word.chars().collect();
+                    if let Some(first) = chars.first_mut() {
+                        *first = first.to_ascii_uppercase();
+                    }
+                    for c in chars.iter_mut().skip(1) {
+                        *c = c.to_ascii_lowercase();
+                    }
+                    chars.into_iter().collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("-");
+            (title, v.as_str())
+        })
+    }
+
+    /// Get all headers as-is with original casing.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.headers.iter().map(|(n, v)| (n.as_str(), v.as_str()))
+    }
+
+    /// Number of headers.
+    pub fn len(&self) -> usize {
+        self.headers.len()
+    }
+
+    /// Check if empty.
+    pub fn is_empty(&self) -> bool {
+        self.headers.is_empty()
+    }
+}
+
+/// Generate Sec-CH-UA header value for Chrome-based browsers.
+///
+/// Format: `"Brand";v="version", ...`
+pub fn generate_sec_ch_ua(browser: &str, version: u16, include_not_a_brand: bool) -> String {
+    let mut brands = Vec::new();
+
+    // Chromium base
+    brands.push(format!("\"Chromium\";v=\"{}\"", version));
+
+    // Browser brand
+    match browser.to_lowercase().as_str() {
+        "chrome" => brands.push(format!("\"Google Chrome\";v=\"{}\"", version)),
+        "edge" => brands.push(format!("\"Microsoft Edge\";v=\"{}\"", version)),
+        "opera" => brands.push(format!("\"Opera\";v=\"{}\"", version)),
+        _ => brands.push(format!("\"{}\";v=\"{}\"", browser, version)),
+    }
+
+    // "Not-A.Brand" fake brand for entropy
+    if include_not_a_brand {
+        brands.push("\"Not-A.Brand\";v=\"99\"".to_string());
+    }
+
+    brands.join(", ")
+}
+
+/// Generate Sec-CH-UA-Full-Version-List header.
+pub fn generate_sec_ch_ua_full(browser: &str, version: &str) -> String {
+    let major = version.split('.').next().unwrap_or("100");
+
+    format!(
+        "\"Chromium\";v=\"{}\", \"{}\";v=\"{}\", \"Not-A.Brand\";v=\"99.0.0.0\"",
+        version,
+        match browser.to_lowercase().as_str() {
+            "chrome" => "Google Chrome",
+            "edge" => "Microsoft Edge",
+            "opera" => "Opera",
+            _ => browser,
+        },
+        version
+    )
+}
+
+#[cfg(test)]
+mod case_tests {
+    use super::*;
+
+    #[test]
+    fn test_case_sensitive_insert() {
+        let mut headers = CaseSensitiveHeaders::new();
+        headers.insert("Content-Type", "application/json");
+        headers.insert("content-type", "text/html"); // Should update
+
+        assert_eq!(headers.get("content-type"), Some("text/html"));
+        assert_eq!(headers.len(), 1);
+    }
+
+    #[test]
+    fn test_title_case() {
+        let mut headers = CaseSensitiveHeaders::new();
+        headers.insert("user-agent", "test");
+        headers.insert("accept-encoding", "gzip");
+
+        let title_cased: Vec<_> = headers.as_title_case().collect();
+        assert_eq!(title_cased[0].0, "User-Agent");
+        assert_eq!(title_cased[1].0, "Accept-Encoding");
+    }
+
+    #[test]
+    fn test_sec_ch_ua_chrome() {
+        let ua = generate_sec_ch_ua("Chrome", 143, true);
+        assert!(ua.contains("Chromium"));
+        assert!(ua.contains("Google Chrome"));
+        assert!(ua.contains("Not-A.Brand"));
+    }
+
+    #[test]
+    fn test_sec_ch_ua_edge() {
+        let ua = generate_sec_ch_ua("Edge", 142, false);
+        assert!(ua.contains("Microsoft Edge"));
+        assert!(!ua.contains("Not-A.Brand"));
+    }
+}
