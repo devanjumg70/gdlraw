@@ -51,9 +51,15 @@
 //! - Redirect cycle detection and credential stripping
 
 pub mod base;
+pub mod client;
 pub mod cookies;
 pub mod dns;
+pub mod emulation;
 pub mod http;
 pub mod socket;
 pub mod tls;
 pub mod urlrequest;
+
+// Convenience re-exports for ergonomic API
+pub use client::{Client, ClientBuilder, RequestBuilder};
+pub use emulation::{Emulation, EmulationBuilder, EmulationFactory};

@@ -1,59 +1,18 @@
+//! TLS module providing fingerprinting and configuration.
+//!
+//! Combines Chromium-style TLS configuration with wreq emulation capabilities.
+
 use crate::base::neterror::NetError;
 use boring::ssl::{SslConnectorBuilder, SslVerifyMode, SslVersion};
 
 pub mod impersonate;
 pub mod options;
 
+// Re-export all types from options
 pub use self::impersonate::ImpersonateTarget;
-pub use self::options::{TlsOptions, TlsOptionsBuilder};
-
-/// A TLS protocol version.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TlsVersion(pub SslVersion);
-
-impl std::hash::Hash for TlsVersion {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // Hash based on a unique u8 value for each version
-        let version_id: u8 = match self.0 {
-            SslVersion::TLS1 => 0,
-            SslVersion::TLS1_1 => 1,
-            SslVersion::TLS1_2 => 2,
-            SslVersion::TLS1_3 => 3,
-            _ => 255, // Unknown version
-        };
-        version_id.hash(state);
-    }
-}
-
-impl TlsVersion {
-    pub const TLS_1_0: TlsVersion = TlsVersion(SslVersion::TLS1);
-    pub const TLS_1_1: TlsVersion = TlsVersion(SslVersion::TLS1_1);
-    pub const TLS_1_2: TlsVersion = TlsVersion(SslVersion::TLS1_2);
-    pub const TLS_1_3: TlsVersion = TlsVersion(SslVersion::TLS1_3);
-}
-
-impl From<TlsVersion> for SslVersion {
-    fn from(val: TlsVersion) -> Self {
-        val.0
-    }
-}
-
-/// A TLS ALPN protocol.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct AlpnProtocol(&'static [u8]);
-
-impl AlpnProtocol {
-    pub const HTTP1: AlpnProtocol = AlpnProtocol(b"http/1.1");
-    pub const HTTP2: AlpnProtocol = AlpnProtocol(b"h2");
-
-    pub const fn new(value: &'static [u8]) -> Self {
-        AlpnProtocol(value)
-    }
-
-    pub fn to_bytes(&self) -> &[u8] {
-        self.0
-    }
-}
+pub use self::options::{
+    AlpnProtocol, AlpsProtocol, CertCompressAlg, TlsOptions, TlsOptionsBuilder, TlsVersion,
+};
 
 /// Configuration for TLS Client Hello fingerprinting.
 /// Matches Chromium's TLS configuration for accurate fingerprinting.
@@ -66,8 +25,8 @@ pub struct TlsConfig {
     pub enable_grease: bool,
     pub enable_ocsp_stapling: bool,
     pub enable_signed_cert_timestamps: bool,
-    pub curves: Vec<String>, // Curve names like "X25519", "P-256"
-    pub sigalgs: String,     // OpenSSL sigalgs string
+    pub curves: Vec<String>,
+    pub sigalgs: String,
 }
 
 impl Default for TlsConfig {
@@ -82,7 +41,6 @@ impl TlsConfig {
         Self {
             min_version: Some(SslVersion::TLS1_2),
             max_version: Some(SslVersion::TLS1_3),
-            // Chromium's cipher list (approximation)
             cipher_list:
                 "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:\
                 ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:\
@@ -95,7 +53,6 @@ impl TlsConfig {
             enable_grease: true,
             enable_ocsp_stapling: true,
             enable_signed_cert_timestamps: true,
-            // Chrome's default curves
             curves: vec![
                 "X25519".to_string(),
                 "P-256".to_string(),
@@ -110,7 +67,6 @@ impl TlsConfig {
 
     /// Apply this configuration to an SSL connector builder.
     pub fn apply_to_builder(&self, builder: &mut SslConnectorBuilder) -> Result<(), NetError> {
-        // Set TLS versions
         if let Some(min) = self.min_version {
             builder
                 .set_min_proto_version(Some(min))
@@ -122,12 +78,10 @@ impl TlsConfig {
                 .map_err(|_| NetError::SslProtocolError)?;
         }
 
-        // Set cipher list
         builder
             .set_cipher_list(&self.cipher_list)
             .map_err(|_| NetError::SslProtocolError)?;
 
-        // Set ALPN protocols
         if !self.alpn_protos.is_empty() {
             let mut alpn_wire = Vec::new();
             for proto in &self.alpn_protos {
@@ -142,22 +96,12 @@ impl TlsConfig {
                 .map_err(|_| NetError::SslProtocolError)?;
         }
 
-        // Enable GREASE explicitly
-        // Note: BoringSSL's boring crate may not expose set_grease_enabled directly.
-        // GREASE is enabled by default in BoringSSL for TLS 1.3.
-        // If the API becomes available:
-        // if self.enable_grease {
-        //     builder.set_grease_enabled(true);
-        // }
-
-        // Set signature algorithms
         if !self.sigalgs.is_empty() {
             builder
                 .set_sigalgs_list(&self.sigalgs)
                 .map_err(|_| NetError::SslProtocolError)?;
         }
 
-        // Set curves/groups
         if !self.curves.is_empty() {
             let curves_str = self.curves.join(":");
             builder
@@ -165,19 +109,14 @@ impl TlsConfig {
                 .map_err(|_| NetError::SslProtocolError)?;
         }
 
-        // Certificate verification (use system verifier)
         builder.set_verify(SslVerifyMode::PEER);
-
-        // Enable OCSP stapling request
-        // Note: This requires building with the right feature flags in boring
 
         Ok(())
     }
 
-    /// Check if SNI (Server Name Indication) should be set for this host.
+    /// Check if SNI should be set for this host.
     /// Per RFC 6066, SNI MUST NOT be set for raw IP addresses.
     pub fn should_set_sni(host: &str) -> bool {
-        // If the host parses as an IP address, don't set SNI
         host.parse::<std::net::IpAddr>().is_err()
     }
 }

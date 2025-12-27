@@ -222,7 +222,7 @@ impl HttpStreamFactory {
                 builder.priorities(priorities.clone());
             }
             if let Some(ref stream_dep) = fp.stream_dependency {
-                builder.headers_stream_dependency(stream_dep.clone());
+                builder.headers_stream_dependency(*stream_dep);
             }
             if let Some(ref experimental) = fp.experimental_settings {
                 builder.experimental_settings(experimental.clone());

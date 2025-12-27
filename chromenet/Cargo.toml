@@ -100,3 +100,7 @@ harness = false
 [[bench]]
 name = "pinning_bench"
 harness = false
+
+[[bench]]
+name = "emulation_bench"
+harness = false
