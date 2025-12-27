@@ -135,3 +135,32 @@ impl Http2OptionsBuilder {
         self.config
     }
 }
+
+impl Http2Options {
+    /// Convert to H2Fingerprint for stream factory.
+    pub fn to_h2_fingerprint(&self) -> H2Fingerprint {
+        let mut fp = self.fingerprint.clone().unwrap_or_default();
+
+        // Apply individual settings if not already in fingerprint
+        if let Some(window) = self.initial_window_size {
+            fp.initial_window_size = window;
+        }
+        if let Some(frame) = self.max_frame_size {
+            fp.max_frame_size = Some(frame);
+        }
+        if let Some(concurrent) = self.max_concurrent_streams {
+            fp.max_concurrent_streams = Some(concurrent);
+        }
+        if let Some(header_list) = self.max_header_list_size {
+            fp.max_header_list_size = Some(header_list);
+        }
+        if let Some(header_table) = self.header_table_size {
+            fp.header_table_size = Some(header_table);
+        }
+        if let Some(push) = self.enable_push {
+            fp.enable_push = Some(push);
+        }
+
+        fp
+    }
+}

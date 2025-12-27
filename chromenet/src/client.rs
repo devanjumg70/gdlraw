@@ -251,6 +251,11 @@ impl RequestBuilder {
                     }
                 }
             }
+
+            // Apply H2 fingerprint from emulation
+            if let Some(h2_opts) = &emu.http2_options {
+                job.set_h2_fingerprint(h2_opts.to_h2_fingerprint());
+            }
         }
 
         // Apply custom headers (override emulation headers)

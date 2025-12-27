@@ -202,6 +202,11 @@ impl URLRequestHttpJob {
         let _ = self.transaction.add_header(key, value);
     }
 
+    /// Set HTTP/2 fingerprint for browser emulation.
+    pub fn set_h2_fingerprint(&mut self, fingerprint: crate::http::H2Fingerprint) {
+        self.transaction.set_h2_fingerprint(fingerprint);
+    }
+
     /// Get the current load state of the job.
     ///
     /// Returns the internal transaction's load state for progress reporting.
