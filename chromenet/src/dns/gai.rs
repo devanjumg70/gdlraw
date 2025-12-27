@@ -170,15 +170,6 @@ impl Iterator for SocketAddrs {
     }
 }
 
-impl IntoIterator for SocketAddrs {
-    type Item = SocketAddr;
-    type IntoIter = std::vec::IntoIter<SocketAddr>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.addrs.into_iter()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,7 +14,7 @@ static FACTORY: OnceLock<Arc<HttpStreamFactory>> = OnceLock::new();
 static COOKIE_STORE: OnceLock<Arc<CookieMonster>> = OnceLock::new();
 
 fn get_pool() -> &'static Arc<ClientSocketPool> {
-    POOL.get_or_init(|| Arc::new(ClientSocketPool::new()))
+    POOL.get_or_init(|| Arc::new(ClientSocketPool::new(None)))
 }
 
 fn get_factory() -> &'static Arc<HttpStreamFactory> {

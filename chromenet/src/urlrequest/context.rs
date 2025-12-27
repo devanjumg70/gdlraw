@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 /// Configuration options for URLRequestContext.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct URLRequestContextConfig {
     /// User-Agent string to use for requests.
     pub user_agent: String,

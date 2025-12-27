@@ -1,4 +1,3 @@
-use crate::base::context::IoResultExt;
 use crate::base::neterror::NetError;
 use crate::dns::{HickoryResolver, Name, Resolve};
 use crate::socket::stream::{BoxedSocket, StreamSocket};

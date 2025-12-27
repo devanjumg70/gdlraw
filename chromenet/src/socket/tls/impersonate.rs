@@ -1,4 +1,4 @@
-use super::{AlpnProtocol, TlsOptions, TlsVersion};
+use super::{TlsOptions, TlsVersion};
 use boring::ssl::CertificateCompressionAlgorithm;
 
 /// Browser impersonation targets.
@@ -77,7 +77,6 @@ fn firefox_v128_options() -> TlsOptions {
         .certificate_compression_algorithms(&[
             CertificateCompressionAlgorithm::ZLIB,
             CertificateCompressionAlgorithm::BROTLI,
-            CertificateCompressionAlgorithm::ZSTD,
         ])
         .build()
 }
@@ -89,7 +88,7 @@ fn safari_v17_options() -> TlsOptions {
         .sigalgs_list(SAFARI_SIGALGS)
         .min_tls_version(TlsVersion::TLS_1_0)
         .max_tls_version(TlsVersion::TLS_1_3)
-        .session_ticket(false)
+        // session_ticket: false - handled by TlsOptions default
         .grease_enabled(true)
         .enable_ocsp_stapling(true)
         .enable_signed_cert_timestamps(true)

@@ -8,8 +8,22 @@ pub use self::impersonate::ImpersonateTarget;
 pub use self::options::{TlsOptions, TlsOptionsBuilder};
 
 /// A TLS protocol version.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TlsVersion(pub SslVersion);
+
+impl std::hash::Hash for TlsVersion {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash based on a unique u8 value for each version
+        let version_id: u8 = match self.0 {
+            SslVersion::TLS1 => 0,
+            SslVersion::TLS1_1 => 1,
+            SslVersion::TLS1_2 => 2,
+            SslVersion::TLS1_3 => 3,
+            _ => 255, // Unknown version
+        };
+        version_id.hash(state);
+    }
+}
 
 impl TlsVersion {
     pub const TLS_1_0: TlsVersion = TlsVersion(SslVersion::TLS1);

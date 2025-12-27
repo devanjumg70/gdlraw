@@ -14,7 +14,7 @@ use std::time::Duration;
 // Re-export from http2 crate for fingerprint control
 pub use http2::frame::{
     ExperimentalSettings, Priorities, PrioritiesBuilder, Priority, PseudoId, PseudoOrder, Setting,
-    SettingId, SettingsOrder, SettingsOrderBuilder, StreamDependency, StreamId,
+    SettingId, SettingsOrder, SettingsOrderBuilder, StreamDependency,
 };
 
 /// Extended HTTP/2 settings with fingerprint emulation support.
@@ -308,24 +308,24 @@ fn chrome_priorities() -> Priorities {
     // This creates a priority tree for resource scheduling
     PrioritiesBuilder::new()
         .priority(Priority::new(
-            StreamId::new(3),
-            StreamDependency::new(0, 200, false),
+            3.into(),
+            StreamDependency::new(0.into(), 200, false),
         ))
         .priority(Priority::new(
-            StreamId::new(5),
-            StreamDependency::new(0, 100, false),
+            5.into(),
+            StreamDependency::new(0.into(), 100, false),
         ))
         .priority(Priority::new(
-            StreamId::new(7),
-            StreamDependency::new(0, 0, false),
+            7.into(),
+            StreamDependency::new(0.into(), 0, false),
         ))
         .priority(Priority::new(
-            StreamId::new(9),
-            StreamDependency::new(7, 0, false),
+            9.into(),
+            StreamDependency::new(7.into(), 0, false),
         ))
         .priority(Priority::new(
-            StreamId::new(11),
-            StreamDependency::new(3, 0, false),
+            11.into(),
+            StreamDependency::new(3.into(), 0, false),
         ))
         .build()
 }

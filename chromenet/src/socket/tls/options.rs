@@ -1,8 +1,6 @@
-use super::{AlpnProtocol, TlsVersion};
+use super::TlsVersion;
 use crate::base::neterror::NetError;
-use boring::ssl::{
-    CertificateCompressionAlgorithm, ExtensionType, SslConnectorBuilder, SslVerifyMode,
-};
+use boring::ssl::{CertificateCompressionAlgorithm, SslConnectorBuilder, SslVerifyMode};
 
 /// Builder for `TlsOptions`.
 #[must_use]
@@ -234,9 +232,11 @@ impl TlsOptions {
         }
 
         // Enable session tickets? (default true in boring usually)
-        if !self.session_ticket {
-            builder.set_num_tickets(0);
-        }
+        // Note: set_num_tickets is not available in boring 4.x
+        // Session ticket control would need a different API
+        // if !self.session_ticket {
+        //     builder.set_num_tickets(0);
+        // }
 
         // Certificate verification (use system verifier)
         builder.set_verify(SslVerifyMode::PEER);

@@ -6,9 +6,11 @@
 use crate::base::neterror::NetError;
 use crate::http::h2fingerprint::H2Fingerprint;
 use crate::socket::pool::{ClientSocketPool, PoolResult};
+use bytes::Bytes;
 use dashmap::DashMap;
 use http::{Request, Response};
-use http2::client::conn as h2_conn;
+use http2::client;
+use http2::RecvStream;
 use hyper::body::Incoming;
 use hyper::client::conn::http1;
 use hyper_util::rt::TokioIo;
@@ -17,7 +19,14 @@ use tokio::spawn;
 use url::Url;
 
 /// Type alias for H2 sender (using http2 crate's forked h2)
-type H2Sender = h2_conn::SendRequest<http_body_util::Empty<bytes::Bytes>>;
+/// Uses bytes::Bytes as the body type which implements Buf
+type H2Sender = client::SendRequest<Bytes>;
+
+/// HTTP response body enum that abstracts over H1 and H2 body types
+pub enum ResponseBody {
+    H1(Incoming),
+    H2(RecvStream),
+}
 
 /// Wraps the underlying protocol stream (H1/H2).
 pub struct HttpStream {
@@ -39,19 +48,51 @@ impl HttpStream {
         self.is_reused
     }
 
+    /// Send an HTTP request and get the response.
+    ///
+    /// For H1, uses hyper's body types.
+    /// For H2, uses http2 crate's API with empty body (end_of_stream=true).
     pub async fn send_request(
         &mut self,
         req: Request<http_body_util::Empty<bytes::Bytes>>,
-    ) -> Result<Response<Incoming>, NetError> {
+    ) -> Result<Response<ResponseBody>, NetError> {
         match &mut self.inner {
-            HttpStreamInner::H1(sender) => sender.send_request(req).await.map_err(|e| {
-                tracing::debug!("H1 request error: {:?}", e);
-                NetError::ConnectionClosed
-            }),
-            HttpStreamInner::H2(sender) => sender.send_request(req).await.map_err(|e| {
-                tracing::debug!("H2 request error: {:?}", e);
-                NetError::ConnectionClosed
-            }),
+            HttpStreamInner::H1(sender) => {
+                let resp = sender.send_request(req).await.map_err(|e| {
+                    tracing::debug!("H1 request error: {:?}", e);
+                    NetError::ConnectionClosed
+                })?;
+                Ok(resp.map(ResponseBody::H1))
+            }
+            HttpStreamInner::H2(sender) => {
+                // Wait for the connection to be ready
+                sender.ready().await.map_err(|e| {
+                    tracing::debug!("H2 ready error: {:?}", e);
+                    NetError::ConnectionFailed
+                })?;
+
+                // Convert Request<Empty<Bytes>> to Request<()> for http2 crate
+                let (parts, _body) = req.into_parts();
+                let req_h2 = Request::from_parts(parts, ());
+
+                // Send request with end_of_stream=true (no body)
+                let (response_fut, _send_stream) = sender
+                    .send_request(req_h2, true)
+                    .map_err(|e| {
+                        tracing::debug!("H2 send_request error: {:?}", e);
+                        NetError::ConnectionFailed
+                    })?;
+
+                // Await the response
+                let resp = response_fut.await.map_err(|e| {
+                    tracing::debug!("H2 response error: {:?}", e);
+                    NetError::ConnectionClosed
+                })?;
+
+                // Convert to our response type
+                let (parts, recv_stream) = resp.into_parts();
+                Ok(Response::from_parts(parts, ResponseBody::H2(recv_stream)))
+            }
         }
     }
 }
@@ -78,15 +119,10 @@ impl H2SessionCache {
     fn get(&self, url: &Url) -> Option<H2Sender> {
         let key = Self::key(url)?;
         let entry = self.sessions.get(&key)?;
-        let sender = entry.value();
-        // Check if sender is still usable
-        if sender.is_closed() {
-            drop(entry);
-            self.sessions.remove(&key);
-            None
-        } else {
-            Some(sender.clone())
-        }
+        // Clone the sender for reuse (SendRequest is Clone)
+        // Note: http2 crate doesn't expose is_closed(), connection errors
+        // will be caught when trying to use the sender
+        Some(entry.value().clone())
     }
 
     /// Store an H2 sender for reuse
@@ -153,10 +189,10 @@ impl HttpStreamFactory {
             let fp = h2_fingerprint.cloned().unwrap_or_default();
 
             // Build http2 connection with fingerprint settings
-            let mut builder = h2_conn::Builder::new(io::TokioExecutor::new());
+            let mut builder = client::Builder::new();
 
             // Apply window sizes
-            builder.initial_stream_window_size(fp.initial_window_size);
+            builder.initial_window_size(fp.initial_window_size);
             builder.initial_connection_window_size(fp.initial_conn_window_size);
 
             // Apply frame limits
@@ -201,23 +237,9 @@ impl HttpStreamFactory {
                 builder.no_rfc7540_priorities(no_priorities);
             }
 
-            // Apply keep-alive settings
-            if let Some(interval) = fp.keep_alive_interval {
-                builder.keep_alive_interval(interval);
-            }
-            if let Some(timeout) = fp.keep_alive_timeout {
-                builder.keep_alive_timeout(timeout);
-            }
-            builder.keep_alive_while_idle(fp.keep_alive_while_idle);
-
-            // Apply adaptive window
-            if fp.adaptive_window {
-                builder.adaptive_window(true);
-            }
-
-            // Perform handshake
+            // Perform handshake with Bytes body type
             let (sender, conn) = builder
-                .handshake::<_, http_body_util::Empty<bytes::Bytes>>(io)
+                .handshake::<_, Bytes>(io)
                 .await
                 .map_err(|e| {
                     tracing::debug!("H2 handshake failed: {:?}", e);
@@ -259,32 +281,5 @@ impl HttpStreamFactory {
 
     pub fn report_failure(&self, url: &Url) {
         self.pool.discard_socket(url);
-    }
-}
-
-// Helper for H2 executor
-mod io {
-    use http2::rt::Executor;
-    use std::future::Future;
-
-    #[derive(Clone)]
-    pub struct TokioExecutor {
-        _p: (),
-    }
-
-    impl TokioExecutor {
-        pub fn new() -> Self {
-            Self { _p: () }
-        }
-    }
-
-    impl<F> Executor<F> for TokioExecutor
-    where
-        F: Future + Send + 'static,
-        F::Output: Send + 'static,
-    {
-        fn execute(&self, fut: F) {
-            tokio::spawn(fut);
-        }
     }
 }
