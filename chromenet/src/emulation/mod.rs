@@ -12,7 +12,6 @@ pub mod profiles;
 pub use factory::{Emulation, EmulationBuilder, EmulationFactory};
 
 use crate::http::H2Fingerprint;
-use crate::socket::tls::TlsOptions;
 
 /// HTTP/1.1 protocol options.
 #[derive(Debug, Clone, Default)]

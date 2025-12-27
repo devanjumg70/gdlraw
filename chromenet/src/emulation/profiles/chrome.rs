@@ -3,7 +3,6 @@
 //! Provides emulation configurations for various Chrome versions.
 
 use crate::emulation::{Emulation, EmulationFactory, Http2Options};
-use crate::http::h2fingerprint::{H2Fingerprint, H2FingerprintBuilder};
 use crate::socket::tls::{AlpnProtocol, TlsOptions, TlsVersion};
 use http::{header, HeaderMap, HeaderValue};
 

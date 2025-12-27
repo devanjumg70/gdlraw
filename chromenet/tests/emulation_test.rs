@@ -298,3 +298,92 @@ fn test_all_edge_versions() {
         assert!(!emu.headers().is_empty(), "{:?} missing headers", v);
     }
 }
+
+// === OkHttp Profile Tests ===
+
+#[test]
+fn test_okhttp_default() {
+    use chromenet::emulation::profiles::OkHttp;
+    assert_eq!(OkHttp::default(), OkHttp::V5);
+}
+
+#[test]
+fn test_okhttp_emulation() {
+    use chromenet::emulation::profiles::OkHttp;
+    let emu = OkHttp::V5.emulation();
+
+    // OkHttp should have TLS without GREASE (Java-based)
+    assert!(emu.tls_options().is_some());
+    let tls = emu.tls_options().unwrap();
+    assert_eq!(tls.grease_enabled, Some(false));
+
+    // Should have H2 options
+    assert!(emu.http2_options().is_some());
+
+    // Should have headers with okhttp User-Agent
+    assert!(!emu.headers().is_empty());
+    let ua = emu.headers().get(http::header::USER_AGENT).unwrap();
+    assert!(ua.to_str().unwrap().contains("okhttp"));
+}
+
+#[test]
+fn test_all_okhttp_versions() {
+    use chromenet::emulation::profiles::OkHttp;
+    let versions = [
+        OkHttp::V3_9,
+        OkHttp::V3_11,
+        OkHttp::V3_13,
+        OkHttp::V3_14,
+        OkHttp::V4_9,
+        OkHttp::V4_10,
+        OkHttp::V4_12,
+        OkHttp::V5,
+    ];
+
+    for v in versions {
+        let emu = v.emulation();
+        assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
+        assert!(emu.http2_options().is_some(), "{:?} missing H2", v);
+        assert!(!emu.headers().is_empty(), "{:?} missing headers", v);
+    }
+}
+
+// === Opera Profile Tests ===
+
+#[test]
+fn test_opera_default() {
+    use chromenet::emulation::profiles::Opera;
+    assert_eq!(Opera::default(), Opera::V119);
+}
+
+#[test]
+fn test_opera_emulation() {
+    use chromenet::emulation::profiles::Opera;
+    let emu = Opera::V119.emulation();
+
+    // Opera is Chromium-based, should have GREASE
+    assert!(emu.tls_options().is_some());
+    let tls = emu.tls_options().unwrap();
+    assert!(tls.grease_enabled.unwrap_or(false));
+
+    // Should have H2 options
+    assert!(emu.http2_options().is_some());
+
+    // Should have headers with OPR branding
+    assert!(!emu.headers().is_empty());
+    let ua = emu.headers().get(http::header::USER_AGENT).unwrap();
+    assert!(ua.to_str().unwrap().contains("OPR/"));
+}
+
+#[test]
+fn test_all_opera_versions() {
+    use chromenet::emulation::profiles::Opera;
+    let versions = [Opera::V116, Opera::V117, Opera::V118, Opera::V119];
+
+    for v in versions {
+        let emu = v.emulation();
+        assert!(emu.tls_options().is_some(), "{:?} missing TLS", v);
+        assert!(emu.http2_options().is_some(), "{:?} missing H2", v);
+        assert!(!emu.headers().is_empty(), "{:?} missing headers", v);
+    }
+}
