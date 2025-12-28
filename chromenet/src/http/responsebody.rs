@@ -110,9 +110,7 @@ impl futures::Stream for BodyStream {
                             Poll::Pending
                         }
                     }
-                    Poll::Ready(Some(Err(_))) => {
-                        Poll::Ready(Some(Err(NetError::HttpBodyError)))
-                    }
+                    Poll::Ready(Some(Err(_))) => Poll::Ready(Some(Err(NetError::HttpBodyError))),
                     Poll::Ready(None) => Poll::Ready(None),
                     Poll::Pending => Poll::Pending,
                 }

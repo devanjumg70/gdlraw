@@ -6,7 +6,6 @@ use crate::http::retry::{calculate_backoff, RetryConfig, RetryReason};
 use crate::http::streamfactory::{HttpStream, HttpStreamFactory, StreamBody};
 use crate::http::H2Fingerprint;
 use http::{Request, Response, Version};
-use http_body_util::Full;
 use std::sync::Arc;
 use url::Url;
 
@@ -205,9 +204,7 @@ impl HttpNetworkTransaction {
                     // Use the request body (supports POST/PUT data)
                     let body = std::mem::take(&mut self.request_body).into_full();
 
-                    let mut req = builder
-                        .body(body)
-                        .map_err(|_| NetError::InvalidUrl)?;
+                    let mut req = builder.body(body).map_err(|_| NetError::InvalidUrl)?;
 
                     *req.headers_mut() = headers_map;
 

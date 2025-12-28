@@ -78,7 +78,11 @@ impl HttpStream {
 
                 // Extract body using BodyExt
                 let (parts, body) = req.into_parts();
-                let body_bytes = body.collect().await.map_err(|_| NetError::ConnectionClosed)?.to_bytes();
+                let body_bytes = body
+                    .collect()
+                    .await
+                    .map_err(|_| NetError::ConnectionClosed)?
+                    .to_bytes();
                 let has_body = !body_bytes.is_empty();
 
                 // Create H2 request

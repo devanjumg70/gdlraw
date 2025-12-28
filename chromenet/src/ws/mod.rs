@@ -5,7 +5,7 @@
 //!
 //! # Example
 //! ```ignore
-//! use chromenet::ws::{WebSocket, Message};
+//! use chromenet::ws::{WebSocket, WebSocketBuilder, Message};
 //!
 //! let ws = WebSocket::connect("wss://echo.websocket.org").await?;
 //! ws.send(Message::Text("Hello".into())).await?;
@@ -15,5 +15,5 @@
 mod connection;
 mod message;
 
-pub use connection::WebSocket;
-pub use message::Message;
+pub use connection::{WebSocket, WebSocketBuilder};
+pub use message::{CloseCode, CloseFrame, Message};

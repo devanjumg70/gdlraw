@@ -1,4 +1,9 @@
-//! TLS configuration, certificate pinning, and CT verification.
+//! TLS security features.
+//!
+//! Provides TLS security mechanisms mirroring Chromium's transport security:
+//! - [`hsts`]: HTTP Strict Transport Security with JSON persistence
+//! - [`pinning`]: Certificate pinning with SPKI hash verification
+//! - [`ctverifier`]: Certificate Transparency verification
 
 pub mod ct;
 pub mod ctverifier;

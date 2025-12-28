@@ -1,7 +1,7 @@
 //! QUIC connection.
 
-use crate::base::neterror::NetError;
 use super::config::QuicConfig;
+use crate::base::neterror::NetError;
 use std::net::SocketAddr;
 use url::Url;
 
@@ -72,7 +72,7 @@ impl QuicConnectionBuilder {
     ///
     /// Note: Full implementation requires the `quinn` crate.
     pub async fn connect(self) -> Result<QuicConnection, NetError> {
-        let url = self.url.ok_or(NetError::InvalidUrl)?;
+        let _url = self.url.ok_or(NetError::InvalidUrl)?;
 
         // Placeholder - full implementation would:
         // 1. Resolve DNS
@@ -91,11 +91,9 @@ impl QuicConnectionBuilder {
 }
 
 /// Connect to a QUIC server (convenience function).
+#[allow(dead_code)] // API placeholder for quinn integration
 pub async fn connect(url: &str) -> Result<QuicConnection, NetError> {
-    QuicConnectionBuilder::new()
-        .url(url)?
-        .connect()
-        .await
+    QuicConnectionBuilder::new().url(url)?.connect().await
 }
 
 #[cfg(test)]

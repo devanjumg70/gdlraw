@@ -109,7 +109,7 @@ impl http_body::Body for BodyWrapper {
     }
 
     fn is_end_stream(&self) -> bool {
-        self.inner.as_ref().map_or(true, |b| b.is_empty())
+        self.inner.as_ref().is_none_or(|b| b.is_empty())
     }
 
     fn size_hint(&self) -> http_body::SizeHint {

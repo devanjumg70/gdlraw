@@ -2,18 +2,15 @@
 //!
 //! Provides full WebSocket client functionality.
 
-use crate::base::neterror::NetError;
 use super::message::{CloseCode, CloseFrame, Message};
+use crate::base::neterror::NetError;
 use bytes::Bytes;
 use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
-use tokio_tungstenite::{
-    connect_async, tungstenite,
-    MaybeTlsStream, WebSocketStream,
-};
+use tokio_tungstenite::{connect_async, tungstenite, MaybeTlsStream, WebSocketStream};
 use url::Url;
 
 /// Type alias for the WebSocket stream.
@@ -43,12 +40,10 @@ impl WebSocket {
             return Err(NetError::InvalidUrl);
         }
 
-        let (ws_stream, _response) = connect_async(url.as_str())
-            .await
-            .map_err(|e| {
-                tracing::debug!("WebSocket connect error: {:?}", e);
-                NetError::ConnectionFailed
-            })?;
+        let (ws_stream, _response) = connect_async(url.as_str()).await.map_err(|e| {
+            tracing::debug!("WebSocket connect error: {:?}", e);
+            NetError::ConnectionFailed
+        })?;
 
         let (sink, stream) = ws_stream.split();
 
@@ -177,7 +172,7 @@ impl WebSocketBuilder {
 
     /// Check if secure (wss://).
     pub fn is_secure(&self) -> bool {
-        self.url.as_ref().map_or(false, |u| u.scheme() == "wss")
+        self.url.as_ref().is_some_and(|u| u.scheme() == "wss")
     }
 
     /// Connect to the server.
@@ -190,10 +185,10 @@ impl WebSocketBuilder {
 /// Convert our Message to tungstenite Message.
 fn message_to_tungstenite(msg: Message) -> tungstenite::Message {
     match msg {
-        Message::Text(s) => tungstenite::Message::Text(s.into()),
-        Message::Binary(b) => tungstenite::Message::Binary(b.to_vec().into()),
-        Message::Ping(d) => tungstenite::Message::Ping(d.into()),
-        Message::Pong(d) => tungstenite::Message::Pong(d.into()),
+        Message::Text(s) => tungstenite::Message::Text(s),
+        Message::Binary(b) => tungstenite::Message::Binary(b.to_vec()),
+        Message::Ping(d) => tungstenite::Message::Ping(d),
+        Message::Pong(d) => tungstenite::Message::Pong(d),
         Message::Close(frame) => {
             let tung_frame = frame.map(|f| tungstenite::protocol::CloseFrame {
                 code: tungstenite::protocol::frame::coding::CloseCode::from(f.code.0),
@@ -234,18 +229,14 @@ mod tests {
 
     #[test]
     fn test_builder_url() {
-        let builder = WebSocketBuilder::new()
-            .url("ws://example.com/ws")
-            .unwrap();
+        let builder = WebSocketBuilder::new().url("ws://example.com/ws").unwrap();
         assert!(builder.url.is_some());
         assert!(!builder.is_secure());
     }
 
     #[test]
     fn test_builder_secure() {
-        let builder = WebSocketBuilder::new()
-            .url("wss://example.com/ws")
-            .unwrap();
+        let builder = WebSocketBuilder::new().url("wss://example.com/ws").unwrap();
         assert!(builder.is_secure());
     }
 
@@ -257,8 +248,7 @@ mod tests {
 
     #[test]
     fn test_builder_headers() {
-        let builder = WebSocketBuilder::new()
-            .header("Authorization", "Bearer token");
+        let builder = WebSocketBuilder::new().header("Authorization", "Bearer token");
         assert!(builder.headers.contains_key("authorization"));
     }
 

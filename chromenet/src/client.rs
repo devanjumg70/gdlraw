@@ -34,6 +34,7 @@ use url::Url;
 ///
 /// Use [`Client::builder()`] to configure and create a client.
 #[derive(Clone)]
+#[allow(dead_code)] // Fields reserved for future features
 pub struct Client {
     pool: Arc<ClientSocketPool>,
     factory: Arc<HttpStreamFactory>,
@@ -114,6 +115,7 @@ impl Client {
 
 /// Builder for creating a [`Client`].
 #[derive(Default)]
+#[allow(dead_code)] // Fields reserved for future features
 pub struct ClientBuilder {
     emulation: Option<Emulation>,
     cookie_store: Option<CookieMonster>,

@@ -201,12 +201,7 @@ impl HttpCache {
         }
 
         // Calculate TTL
-        let ttl = if let Some(max_age) = cache_control.max_age {
-            Some(Duration::from_secs(max_age))
-        } else {
-            // Default TTL for responses without max-age
-            None
-        };
+        let ttl = cache_control.max_age.map(Duration::from_secs);
 
         // Skip if not cacheable
         if ttl.is_none() && cache_control.no_cache {

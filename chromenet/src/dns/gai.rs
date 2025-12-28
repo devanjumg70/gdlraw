@@ -83,10 +83,12 @@ impl Resolve for GaiResolver {
 /// Utility for parsing IP address strings directly.
 ///
 /// Bypasses DNS resolution if the host is already an IP address.
+#[allow(dead_code)] // Public utility API
 pub struct SocketAddrs {
     addrs: Vec<SocketAddr>,
 }
 
+#[allow(dead_code)] // Public utility API
 impl SocketAddrs {
     /// Creates a new `SocketAddrs` from a vector.
     pub fn new(addrs: Vec<SocketAddr>) -> Self {
