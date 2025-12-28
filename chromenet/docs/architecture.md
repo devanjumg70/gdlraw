@@ -1,77 +1,77 @@
-# Chromenet Architecture
+# chromenet Architecture
 
 ## Overview
-`chromenet` is a Rust port of Chromium's network stack (`//net`), designed for browser-like HTTP requests with TLS fingerprinting matching.
 
-**Stats:** ~6,000 LOC | 112 tests | 9 benchmarks
+chromenet is a Chromium-inspired HTTP networking library that provides browser-grade networking with full fingerprint control.
 
-```mermaid
-graph TD
-    A[URLRequest] --> B[URLRequestHttpJob]
-    B --> C[HttpNetworkTransaction]
-    C --> D[HttpStreamFactory]
-    D --> E[ClientSocketPool]
-    E --> F[ConnectJob]
-    F --> G[TcpStream]
-    F --> H[SslStream]
-    
-    C -.-> I[CookieMonster]
-    C -.-> J[OrderedHeaderMap]
-    C -.-> K[H2Settings]
-    
-    subgraph "TLS Security"
-        L[HstsStore]
-        M[PinStore]
-        N[CtVerifier]
-    end
-    
-    subgraph "Cookie Security"
-        O[PSL Validation]
-        P[Browser Extraction]
-        Q[oscrypt Decryption]
-    end
+## Layer Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Public API Layer                         │
+│  Client, RequestBuilder, URLRequest                         │
+├─────────────────────────────────────────────────────────────┤
+│                     HTTP Layer                               │
+│  HttpNetworkTransaction, HttpCache, Multipart, Streaming    │
+├─────────────────────────────────────────────────────────────┤
+│                     Protocol Layer                           │
+│  HttpStreamFactory (H1/H2), WebSocket, QUIC                 │
+├─────────────────────────────────────────────────────────────┤
+│                     Connection Layer                         │
+│  ClientSocketPool, ConnectJob, Proxy                        │
+├─────────────────────────────────────────────────────────────┤
+│                     Security Layer                           │
+│  BoringSSL, HSTS, Pinning, CT                               │
+├─────────────────────────────────────────────────────────────┤
+│                     State Layer                              │
+│  CookieMonster, AuthCache, DNS                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Modules
+## Module Map
 
-| Module | Files | Purpose |
-|--------|-------|---------|
-| [base](base.md) | 2 | Error codes, load states |
-| [cookies](cookies.md) | 7 | Cookie storage, parsing, PSL, browser extraction |
-| [http](http.md) | 9 | Transaction, streams, headers, H2 fingerprinting |
-| [socket](socket.md) | 8 | Pool, connect job, TLS, proxy, auth cache |
-| [tls](tls.md) | 4 | HSTS, certificate pinning, CT verification |
-| [urlrequest](urlrequest.md) | 5 | Public API, redirect handling, device emulation |
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| `base` | Core types | `NetError`, `LoadState` |
+| `client` | High-level API | `Client`, `ClientBuilder` |
+| `cookies` | Cookie storage | `CookieMonster`, `CanonicalCookie` |
+| `dns` | Resolution | `HickoryResolver` |
+| `emulation` | Browser profiles | `Emulation`, `Device` |
+| `http` | HTTP handling | `HttpNetworkTransaction`, `HttpCache` |
+| `socket` | Connections | `ClientSocketPool`, `ConnectJob` |
+| `tls` | Security | `HstsStore`, `PinSet` |
+| `ws` | WebSocket | `WebSocket`, `Message` |
+| `quic` | HTTP/3 | `QuicConfig`, `QuicConnection` |
 
 ## Request Flow
 
-1. **URLRequest** - User-facing API, parses URL
-2. **URLRequestHttpJob** - Manages redirects (max 20), strips auth on cross-origin
-3. **HttpNetworkTransaction** - State machine: CreateStream → SendRequest → ReadHeaders
-4. **HttpStreamFactory** - Negotiates H1/H2 based on ALPN, H2 session caching
-5. **ClientSocketPool** - Enforces limits (6/host, 256 total)
-6. **ConnectJob** - DNS → TCP → (Proxy CONNECT) → TLS
+```
+1. Client::get("url")
+   └── RequestBuilder created
 
-## Security Features
+2. RequestBuilder::send()
+   └── URLRequest::new()
+       └── URLRequestHttpJob::start()
 
-| Feature | Module | Description |
-|---------|--------|-------------|
-| HSTS Preload | `tls/hsts` | Force HTTPS for known domains |
-| Certificate Pinning | `tls/pinning` | SPKI hash verification |
-| PSL Validation | `cookies/psl` | Prevent supercookie attacks |
-| Credential Stripping | `urlrequest/job` | CVE-2014-1829 fix |
-| Redirect Limits | `urlrequest/job` | Max 20 redirects |
+3. HttpNetworkTransaction::start()
+   ├── Check HttpCache (if cached, return)
+   ├── HttpStreamFactory::create_stream()
+   │   ├── Check H2 session cache
+   │   └── ClientSocketPool::request_socket()
+   │       └── ConnectJob (DNS → TCP → TLS)
+   └── stream.send_request(body)
 
-## Chromium Mapping
+4. Response processing
+   ├── Handle Set-Cookie headers
+   ├── Handle HSTS headers
+   ├── Handle redirects
+   └── Return to caller
+```
 
-| Chromium C++ | Rust | File |
-|--------------|------|------|
-| `net::URLRequest` | `URLRequest` | urlrequest/request.rs |
-| `net::URLRequestHttpJob` | `URLRequestHttpJob` | urlrequest/job.rs |
-| `net::HttpNetworkTransaction` | `HttpNetworkTransaction` | http/transaction.rs |
-| `net::HttpStreamFactory` | `HttpStreamFactory` | http/streamfactory.rs |
-| `net::ClientSocketPool` | `ClientSocketPool` | socket/pool.rs |
-| `net::ConnectJob` | `ConnectJob` | socket/connectjob.rs |
-| `net::CookieMonster` | `CookieMonster` | cookies/monster.rs |
-| `net::TransportSecurityState` | `HstsStore` | tls/hsts.rs |
-| `net::HttpAuthCache` | `AuthCache` | socket/authcache.rs |
+## Key Design Decisions
+
+1. **BoringSSL Only**: Matches Chromium's TLS fingerprint exactly
+2. **DashMap**: Thread-safe concurrent access for pools and caches
+3. **Builder Pattern**: Ergonomic configuration (Client, Emulation, Request)
+4. **State Machines**: Transaction uses enum-based state machine like Chromium
+5. **Strict Chromium Mapping**: Module names mirror `//net` structure

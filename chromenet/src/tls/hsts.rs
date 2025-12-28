@@ -173,6 +173,84 @@ impl HstsStore {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    /// Save HSTS entries to a JSON file.
+    ///
+    /// Serializes non-expired entries for persistence across restarts.
+    pub fn save_to_file(&self, path: &std::path::Path) -> std::io::Result<()> {
+        use std::io::Write;
+
+        #[derive(serde::Serialize)]
+        struct SerializableEntry {
+            domain: String,
+            include_subdomains: bool,
+            expires_timestamp: Option<i64>,
+        }
+
+        let entries: Vec<SerializableEntry> = self
+            .entries
+            .iter()
+            .filter(|e| !e.is_expired())
+            .map(|e| SerializableEntry {
+                domain: e.key().clone(),
+                include_subdomains: e.include_subdomains,
+                expires_timestamp: e.expires.map(|dt| dt.unix_timestamp()),
+            })
+            .collect();
+
+        let json = serde_json::to_string_pretty(&entries)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        let mut file = std::fs::File::create(path)?;
+        file.write_all(json.as_bytes())?;
+        Ok(())
+    }
+
+    /// Load HSTS entries from a JSON file.
+    ///
+    /// Restores entries from a previous save. Expired entries are skipped.
+    pub fn load_from_file(&self, path: &std::path::Path) -> std::io::Result<usize> {
+        use std::io::Read;
+
+        #[derive(serde::Deserialize)]
+        struct SerializableEntry {
+            domain: String,
+            include_subdomains: bool,
+            expires_timestamp: Option<i64>,
+        }
+
+        let mut file = std::fs::File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        let entries: Vec<SerializableEntry> = serde_json::from_str(&contents)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        let mut loaded = 0;
+        for entry in entries {
+            let expires = entry
+                .expires_timestamp
+                .and_then(|ts| OffsetDateTime::from_unix_timestamp(ts).ok());
+
+            // Skip expired entries
+            if let Some(exp) = expires {
+                if OffsetDateTime::now_utc() > exp {
+                    continue;
+                }
+            }
+
+            self.entries.insert(
+                entry.domain,
+                HstsEntry {
+                    include_subdomains: entry.include_subdomains,
+                    expires,
+                },
+            );
+            loaded += 1;
+        }
+
+        Ok(loaded)
+    }
 }
 
 #[cfg(test)]

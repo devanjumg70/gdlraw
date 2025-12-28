@@ -56,9 +56,11 @@ pub mod cookies;
 pub mod dns;
 pub mod emulation;
 pub mod http;
+pub mod quic;
 pub mod socket;
 pub mod tls;
 pub mod urlrequest;
+pub mod ws;
 
 // Convenience re-exports for ergonomic API
 pub use client::{Client, ClientBuilder, RequestBuilder};
