@@ -3,7 +3,7 @@
 //! This example demonstrates how to use device profiles and HTTP/2
 //! fingerprinting to emulate different browsers.
 
-use chromenet::http::h2settings::H2Settings;
+use chromenet::http::H2Fingerprint;
 use chromenet::urlrequest::device::DeviceRegistry;
 
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
     let devices = DeviceRegistry::all();
 
     println!("--- Available Device Profiles ---\n");
-    for device in &devices {
+    for device in devices {
         println!("{}", device.title);
         println!(
             "  Screen: {}x{} @ {}x",
@@ -36,58 +36,46 @@ fn main() {
     }
 
     // HTTP/2 SETTINGS fingerprinting
-    println!("\n--- HTTP/2 SETTINGS Presets ---\n");
+    println!("\n--- HTTP/2 Fingerprint Presets ---\n");
 
-    let chrome_settings = H2Settings::chrome();
-    println!("Chrome:");
+    let chrome_fp = H2Fingerprint::chrome();
+    println!("Chrome H2 Fingerprint:");
+    println!("  Initial window size: {}", chrome_fp.initial_window_size);
     println!(
-        "  Initial window size: {}",
-        chrome_settings.initial_window_size
+        "  Initial conn window: {}",
+        chrome_fp.initial_conn_window_size
     );
-    println!("  Max frame size: {}", chrome_settings.max_frame_size);
-    println!(
-        "  Max concurrent streams: {}",
-        chrome_settings.max_concurrent_streams
-    );
-    println!("  Header table size: {}", chrome_settings.header_table_size);
-    println!("  Enable push: {}", chrome_settings.enable_push);
+    if let Some(max_frame) = chrome_fp.max_frame_size {
+        println!("  Max frame size: {}", max_frame);
+    }
+    if let Some(max_concurrent) = chrome_fp.max_concurrent_streams {
+        println!("  Max concurrent streams: {}", max_concurrent);
+    }
 
-    let firefox_settings = H2Settings::firefox();
-    println!("\nFirefox:");
+    let firefox_fp = H2Fingerprint::firefox();
+    println!("\nFirefox H2 Fingerprint:");
+    println!("  Initial window size: {}", firefox_fp.initial_window_size);
     println!(
-        "  Initial window size: {}",
-        firefox_settings.initial_window_size
-    );
-    println!("  Max frame size: {}", firefox_settings.max_frame_size);
-    println!(
-        "  Max concurrent streams: {}",
-        firefox_settings.max_concurrent_streams
+        "  Initial conn window: {}",
+        firefox_fp.initial_conn_window_size
     );
 
-    let safari_settings = H2Settings::safari();
-    println!("\nSafari:");
-    println!(
-        "  Initial window size: {}",
-        safari_settings.initial_window_size
-    );
-    println!("  Max frame size: {}", safari_settings.max_frame_size);
-    println!(
-        "  Max concurrent streams: {}",
-        safari_settings.max_concurrent_streams
-    );
+    let safari_fp = H2Fingerprint::safari();
+    println!("\nSafari H2 Fingerprint:");
+    println!("  Initial window size: {}", safari_fp.initial_window_size);
 
     // Show key differences for fingerprinting
     println!("\n--- Fingerprinting Differences ---");
     println!(
         "Chrome initial_window_size: {} bytes",
-        chrome_settings.initial_window_size
+        chrome_fp.initial_window_size
     );
     println!(
         "Firefox initial_window_size: {} bytes",
-        firefox_settings.initial_window_size
+        firefox_fp.initial_window_size
     );
     println!(
         "Difference: {} bytes",
-        chrome_settings.initial_window_size as i64 - firefox_settings.initial_window_size as i64
+        chrome_fp.initial_window_size as i64 - firefox_fp.initial_window_size as i64
     );
 }

@@ -9,6 +9,7 @@ use http::{header, HeaderMap, HeaderValue};
 /// Chrome browser versions for emulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum Chrome {
     /// Chrome 100
     V100,
@@ -51,13 +52,8 @@ pub enum Chrome {
     /// Chrome 141
     V141,
     /// Chrome 143 (latest)
+    #[default]
     V143,
-}
-
-impl Default for Chrome {
-    fn default() -> Self {
-        Chrome::V143
-    }
 }
 
 impl EmulationFactory for Chrome {

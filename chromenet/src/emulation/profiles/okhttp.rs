@@ -9,6 +9,7 @@ use http::{header, HeaderMap, HeaderValue};
 /// OkHttp versions for emulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum OkHttp {
     /// OkHttp 3.9
     V3_9,
@@ -25,13 +26,8 @@ pub enum OkHttp {
     /// OkHttp 4.12
     V4_12,
     /// OkHttp 5.0
+    #[default]
     V5,
-}
-
-impl Default for OkHttp {
-    fn default() -> Self {
-        OkHttp::V5
-    }
 }
 
 impl EmulationFactory for OkHttp {

@@ -149,11 +149,12 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        match result.unwrap_err() {
+        let err = result.err().expect("Should have error");
+        match err {
             NetError::NameNotResolvedFor { domain, .. } => {
                 assert_eq!(domain, "this-domain-definitely-does-not-exist.invalid");
             }
-            e => panic!("Unexpected error type: {:?}", e),
+            _ => panic!("Unexpected error type"),
         }
     }
 

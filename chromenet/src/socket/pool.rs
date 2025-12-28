@@ -56,6 +56,15 @@ pub struct PoolResult {
     pub is_reused: bool,
 }
 
+impl std::fmt::Debug for PoolResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PoolResult")
+            .field("is_h2", &self.is_h2)
+            .field("is_reused", &self.is_reused)
+            .finish_non_exhaustive()
+    }
+}
+
 impl PartialEq for PendingRequest {
     fn eq(&self, other: &Self) -> bool {
         self.priority == other.priority && self.created_at == other.created_at

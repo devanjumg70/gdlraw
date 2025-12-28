@@ -9,6 +9,7 @@ use http::{header, HeaderMap, HeaderValue};
 /// Edge browser versions for emulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum Edge {
     /// Edge 101
     V101,
@@ -29,13 +30,8 @@ pub enum Edge {
     /// Edge 141
     V141,
     /// Edge 142 (latest)
+    #[default]
     V142,
-}
-
-impl Default for Edge {
-    fn default() -> Self {
-        Edge::V142
-    }
 }
 
 impl EmulationFactory for Edge {

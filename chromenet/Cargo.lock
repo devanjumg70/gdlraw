@@ -358,6 +358,7 @@ dependencies = [
  "foreign-types 0.3.2",
  "hickory-resolver",
  "http",
+ "http-body",
  "http-body-util",
  "http2",
  "hyper",

@@ -256,7 +256,7 @@ pub fn generate_sec_ch_ua(browser: &str, version: u16, include_not_a_brand: bool
 
 /// Generate Sec-CH-UA-Full-Version-List header.
 pub fn generate_sec_ch_ua_full(browser: &str, version: &str) -> String {
-    let major = version.split('.').next().unwrap_or("100");
+    let _major = version.split('.').next().unwrap_or("100");
 
     format!(
         "\"Chromium\";v=\"{}\", \"{}\";v=\"{}\", \"Not-A.Brand\";v=\"99.0.0.0\"",

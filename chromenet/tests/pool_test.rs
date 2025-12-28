@@ -11,7 +11,7 @@ async fn test_pool_limits() {
     let url_str = format!("http://127.0.0.1:{}/", port);
     let url = Url::parse(&url_str).unwrap();
 
-    let pool = ClientSocketPool::new();
+    let pool = ClientSocketPool::new(None);
 
     // Spawn a background task to accept connections so ConnectJob doesn't hang or fail
     tokio::spawn(async move {
@@ -32,7 +32,10 @@ async fn test_pool_limits() {
     // 3. Request 7th - Should Fail
     let result = pool.request_socket(&url, None).await;
     assert!(result.is_err(), "Should fail when limit reached");
-    assert_eq!(result.err(), Some(NetError::PreconnectMaxSocketLimit));
+    assert!(matches!(
+        result.unwrap_err(),
+        NetError::PreconnectMaxSocketLimit
+    ));
 
     // 4. Release one
     let socket = sockets.pop().unwrap();

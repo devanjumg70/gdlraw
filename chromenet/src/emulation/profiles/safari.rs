@@ -9,6 +9,7 @@ use http::{header, HeaderMap, HeaderValue};
 /// Safari browser versions for emulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum Safari {
     /// Safari 15.3
     V15_3,
@@ -33,6 +34,7 @@ pub enum Safari {
     /// Safari 18.3
     V18_3,
     /// Safari 18.5 (latest)
+    #[default]
     V18_5,
     /// Safari on iOS 17
     IOS17,
@@ -40,12 +42,6 @@ pub enum Safari {
     IOS18,
     /// Safari on iPad 18
     IPad18,
-}
-
-impl Default for Safari {
-    fn default() -> Self {
-        Safari::V18_5
-    }
 }
 
 impl EmulationFactory for Safari {

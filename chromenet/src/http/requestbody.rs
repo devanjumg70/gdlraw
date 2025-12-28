@@ -1,8 +1,15 @@
 //! Request body for POST/PUT operations.
+//!
+//! Chromium mapping: net/base/upload_data_stream.h
 
 use bytes::Bytes;
+use http_body_util::Full;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 /// Request body for HTTP methods that send data.
+///
+/// Supports in-memory bytes. Streaming body support can be added later.
 #[derive(Debug, Clone, Default)]
 pub enum RequestBody {
     /// No body (GET, HEAD, DELETE).
@@ -36,6 +43,12 @@ impl From<Bytes> for RequestBody {
     }
 }
 
+impl From<&[u8]> for RequestBody {
+    fn from(b: &[u8]) -> Self {
+        RequestBody::Bytes(Bytes::copy_from_slice(b))
+    }
+}
+
 impl RequestBody {
     /// Check if the body is empty.
     pub fn is_empty(&self) -> bool {
@@ -48,6 +61,60 @@ impl RequestBody {
             RequestBody::Empty => 0,
             RequestBody::Bytes(b) => b.len(),
         }
+    }
+
+    /// Take the inner bytes, consuming the body.
+    pub fn take_bytes(&mut self) -> Bytes {
+        match std::mem::take(self) {
+            RequestBody::Empty => Bytes::new(),
+            RequestBody::Bytes(b) => b,
+        }
+    }
+
+    /// Convert to a Full<Bytes> for hyper compatibility.
+    pub fn into_full(self) -> Full<Bytes> {
+        match self {
+            RequestBody::Empty => Full::new(Bytes::new()),
+            RequestBody::Bytes(b) => Full::new(b),
+        }
+    }
+}
+
+/// Wrapper for RequestBody that implements http_body::Body trait.
+pub struct BodyWrapper {
+    inner: Option<Bytes>,
+}
+
+impl From<RequestBody> for BodyWrapper {
+    fn from(body: RequestBody) -> Self {
+        match body {
+            RequestBody::Empty => BodyWrapper { inner: None },
+            RequestBody::Bytes(b) => BodyWrapper { inner: Some(b) },
+        }
+    }
+}
+
+impl http_body::Body for BodyWrapper {
+    type Data = Bytes;
+    type Error = std::convert::Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        match self.inner.take() {
+            Some(data) if !data.is_empty() => Poll::Ready(Some(Ok(http_body::Frame::data(data)))),
+            _ => Poll::Ready(None),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.as_ref().map_or(true, |b| b.is_empty())
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        let size = self.inner.as_ref().map_or(0, |b| b.len() as u64);
+        http_body::SizeHint::with_exact(size)
     }
 }
 
@@ -104,5 +171,24 @@ mod tests {
         let body1: RequestBody = "data".into();
         let body2 = body1.clone();
         assert_eq!(body1.len(), body2.len());
+    }
+
+    #[test]
+    fn test_into_full() {
+        let body: RequestBody = "hello".into();
+        let full = body.into_full();
+        use http_body::Body;
+        assert_eq!(full.size_hint().exact(), Some(5));
+    }
+
+    #[test]
+    fn test_body_wrapper_size_hint() {
+        use http_body::Body;
+
+        let wrapper: BodyWrapper = RequestBody::Bytes(Bytes::from("test")).into();
+        assert_eq!(wrapper.size_hint().exact(), Some(4));
+
+        let empty_wrapper: BodyWrapper = RequestBody::Empty.into();
+        assert_eq!(empty_wrapper.size_hint().exact(), Some(0));
     }
 }

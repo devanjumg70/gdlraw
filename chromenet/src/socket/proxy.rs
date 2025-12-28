@@ -202,18 +202,13 @@ pub struct ProxyPool {
 }
 
 /// Proxy rotation strategy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RotationStrategy {
     /// Round-robin selection.
+    #[default]
     RoundRobin,
     /// Random selection.
     Random,
-}
-
-impl Default for RotationStrategy {
-    fn default() -> Self {
-        RotationStrategy::RoundRobin
-    }
 }
 
 impl ProxyPool {

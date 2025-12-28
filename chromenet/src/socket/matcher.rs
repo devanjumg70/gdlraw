@@ -100,7 +100,7 @@ impl ProxyMatcher {
 
     /// Check if URL should bypass proxy.
     pub fn should_bypass_url(&self, url: &Url) -> bool {
-        url.host_str().map_or(false, |h| self.should_bypass(h))
+        url.host_str().is_some_and(|h| self.should_bypass(h))
     }
 
     fn ip_matches(&self, addr: IpAddr) -> bool {
@@ -125,27 +125,20 @@ impl ProxyMatcher {
         let host_lower = host.to_lowercase();
 
         for domain in &self.domains {
-            // Exact match (with or without leading dot)
+            // Strip leading dot for matching
             let domain_clean = domain.strip_prefix('.').unwrap_or(domain);
 
+            // Exact match
             if host_lower == domain_clean {
                 return true;
             }
 
-            // Subdomain match
-            if host_lower.ends_with(domain_clean) {
-                // Check for proper subdomain boundary
-                let prefix_len = host_lower.len().saturating_sub(domain_clean.len());
-                if prefix_len > 0 {
-                    // If domain has leading dot, it's explicit subdomain match
-                    if domain.starts_with('.') {
-                        return true;
-                    }
-                    // Otherwise check for dot boundary
-                    if host_lower.as_bytes().get(prefix_len.saturating_sub(1)) == Some(&b'.') {
-                        return true;
-                    }
-                }
+            // Subdomain match: host must end with ".domain"
+            // e.g., "www.example.com" matches ".example.com" or "example.com"
+            // but "notexample.com" should NOT match "example.com"
+            let with_dot = format!(".{}", domain_clean);
+            if host_lower.ends_with(&with_dot) {
+                return true;
             }
         }
         false

@@ -9,6 +9,7 @@ use http::{header, HeaderMap, HeaderValue};
 /// Firefox browser versions for emulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum Firefox {
     /// Firefox 109
     V109,
@@ -31,17 +32,12 @@ pub enum Firefox {
     /// Firefox 144
     V144,
     /// Firefox 145 (latest)
+    #[default]
     V145,
     /// Firefox Private Browsing mode
     Private,
     /// Firefox on Android
     Android,
-}
-
-impl Default for Firefox {
-    fn default() -> Self {
-        Firefox::V145
-    }
 }
 
 impl EmulationFactory for Firefox {

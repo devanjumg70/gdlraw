@@ -42,7 +42,7 @@ async fn test_retry_on_reused_socket_failure() {
     });
 
     // 2. Client Setup
-    let pool = Arc::new(ClientSocketPool::new());
+    let pool = Arc::new(ClientSocketPool::new(None));
     let factory = Arc::new(HttpStreamFactory::new(pool.clone()));
     let cookies = Arc::new(CookieMonster::new());
 

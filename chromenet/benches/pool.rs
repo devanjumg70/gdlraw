@@ -7,11 +7,11 @@ use url::Url;
 fn benchmark_pool_operations(c: &mut Criterion) {
     // Benchmark pool creation
     c.bench_function("pool_new", |b| {
-        b.iter(|| black_box(ClientSocketPool::new()))
+        b.iter(|| black_box(ClientSocketPool::new(None)))
     });
 
     // Benchmark pool statistics (pure memory operations)
-    let pool = ClientSocketPool::new();
+    let pool = ClientSocketPool::new(None);
     let url = Url::parse("https://example.com").unwrap();
 
     c.bench_function("pool_stats", |b| {

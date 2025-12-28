@@ -1,10 +1,12 @@
 use crate::base::loadstate::LoadState;
 use crate::base::neterror::NetError;
 use crate::http::orderedheaders::OrderedHeaderMap;
+use crate::http::requestbody::RequestBody;
 use crate::http::retry::{calculate_backoff, RetryConfig, RetryReason};
 use crate::http::streamfactory::{HttpStream, HttpStreamFactory, StreamBody};
 use crate::http::H2Fingerprint;
 use http::{Request, Response, Version};
+use http_body_util::Full;
 use std::sync::Arc;
 use url::Url;
 
@@ -47,6 +49,7 @@ pub struct HttpNetworkTransaction {
     proxy_settings: Option<crate::socket::proxy::ProxySettings>,
     retry_config: RetryConfig,
     retry_attempts: usize,
+    request_body: RequestBody,
 }
 
 impl HttpNetworkTransaction {
@@ -68,7 +71,13 @@ impl HttpNetworkTransaction {
             proxy_settings: None,
             retry_config: RetryConfig::default(),
             retry_attempts: 0,
+            request_body: RequestBody::Empty,
         }
+    }
+
+    /// Set the request body for POST/PUT requests.
+    pub fn set_body(&mut self, body: impl Into<RequestBody>) {
+        self.request_body = body.into();
     }
 
     /// Set custom retry configuration.
@@ -193,8 +202,11 @@ impl HttpNetworkTransaction {
 
                     let headers_map = self.request_headers.clone().to_header_map();
 
+                    // Use the request body (supports POST/PUT data)
+                    let body = std::mem::take(&mut self.request_body).into_full();
+
                     let mut req = builder
-                        .body(http_body_util::Empty::<bytes::Bytes>::new())
+                        .body(body)
                         .map_err(|_| NetError::InvalidUrl)?;
 
                     *req.headers_mut() = headers_map;

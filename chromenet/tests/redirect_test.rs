@@ -97,11 +97,11 @@ async fn test_redirect_persists_proxy() {
 
     // 3. Request
     let mut req = URLRequest::new(&format!("{}/start", base_url)).unwrap();
-    req.set_proxy(chromenet::socket::proxy::ProxySettings {
-        url: url::Url::parse(&format!("http://{}", proxy_addr)).unwrap(),
-        username: None,
-        password: None,
-    });
+    let proxy = chromenet::socket::proxy::ProxyBuilder::new()
+        .url(&format!("http://{}", proxy_addr))
+        .build()
+        .unwrap();
+    req.set_proxy(proxy);
 
     let _ = req.start().await;
 

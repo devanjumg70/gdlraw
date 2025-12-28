@@ -10,6 +10,7 @@ use http::{header, HeaderMap, HeaderValue};
 /// Opera browser versions for emulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum Opera {
     /// Opera 116 (Chromium 131)
     V116,
@@ -18,13 +19,8 @@ pub enum Opera {
     /// Opera 118 (Chromium 133)
     V118,
     /// Opera 119 (Chromium 134)
+    #[default]
     V119,
-}
-
-impl Default for Opera {
-    fn default() -> Self {
-        Opera::V119
-    }
 }
 
 impl EmulationFactory for Opera {

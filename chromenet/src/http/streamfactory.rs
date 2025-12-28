@@ -11,6 +11,7 @@ use dashmap::DashMap;
 use http::{Request, Response};
 use http2::client;
 use http2::RecvStream;
+use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::client::conn::http1;
 use hyper_util::rt::TokioIo;
@@ -35,7 +36,8 @@ pub struct HttpStream {
 }
 
 enum HttpStreamInner {
-    H1(http1::SendRequest<http_body_util::Empty<bytes::Bytes>>),
+    // H1 sender now uses Full<Bytes> for body support
+    H1(http1::SendRequest<Full<Bytes>>),
     H2(H2Sender),
 }
 
@@ -48,13 +50,13 @@ impl HttpStream {
         self.is_reused
     }
 
-    /// Send an HTTP request and get the response.
+    /// Send an HTTP request with a body and get the response.
     ///
-    /// For H1, uses hyper's body types.
-    /// For H2, uses http2 crate's API with empty body (end_of_stream=true).
+    /// For H1, uses hyper's body types with Full<Bytes>.
+    /// For H2, uses http2 crate's API, sending body via SendStream if non-empty.
     pub async fn send_request(
         &mut self,
-        req: Request<http_body_util::Empty<bytes::Bytes>>,
+        req: Request<Full<Bytes>>,
     ) -> Result<Response<StreamBody>, NetError> {
         match &mut self.inner {
             HttpStreamInner::H1(sender) => {
@@ -68,22 +70,34 @@ impl HttpStream {
                 // Clone sender because ready() consumes it
                 let sender = sender.clone();
 
-                // Wait for the connection to be ready - ready() returns ReadySendRequest
+                // Wait for the connection to be ready
                 let mut ready_sender = sender.ready().await.map_err(|e| {
                     tracing::debug!("H2 ready error: {:?}", e);
                     NetError::ConnectionFailed
                 })?;
 
-                // Convert Request<Empty<Bytes>> to Request<()> for http2 crate
-                let (parts, _body) = req.into_parts();
+                // Extract body using BodyExt
+                let (parts, body) = req.into_parts();
+                let body_bytes = body.collect().await.map_err(|_| NetError::ConnectionClosed)?.to_bytes();
+                let has_body = !body_bytes.is_empty();
+
+                // Create H2 request
                 let req_h2 = Request::from_parts(parts, ());
 
-                // Send request with end_of_stream=true (no body)
-                let (response_fut, _send_stream) =
-                    ready_sender.send_request(req_h2, true).map_err(|e| {
+                // Send request - end_of_stream = true only if no body
+                let (response_fut, mut send_stream) =
+                    ready_sender.send_request(req_h2, !has_body).map_err(|e| {
                         tracing::debug!("H2 send_request error: {:?}", e);
                         NetError::ConnectionFailed
                     })?;
+
+                // Send body data if present
+                if has_body {
+                    send_stream.send_data(body_bytes, true).map_err(|e| {
+                        tracing::debug!("H2 send_data error: {:?}", e);
+                        NetError::ConnectionFailed
+                    })?;
+                }
 
                 // Await the response
                 let resp = response_fut.await.map_err(|e| {
@@ -121,9 +135,6 @@ impl H2SessionCache {
     fn get(&self, url: &Url) -> Option<H2Sender> {
         let key = Self::key(url)?;
         let entry = self.sessions.get(&key)?;
-        // Clone the sender for reuse (SendRequest is Clone)
-        // Note: http2 crate doesn't expose is_closed(), connection errors
-        // will be caught when trying to use the sender
         Some(entry.value().clone())
     }
 
@@ -198,35 +209,31 @@ impl HttpStreamFactory {
             builder.initial_connection_window_size(fp.initial_conn_window_size);
 
             // Apply frame limits
-            if let Some(max_frame_size) = fp.max_frame_size {
-                builder.max_frame_size(max_frame_size);
+            if let Some(max_frame) = fp.max_frame_size {
+                builder.max_frame_size(max_frame);
             }
-            if let Some(max_concurrent) = fp.max_concurrent_streams {
-                builder.max_concurrent_streams(max_concurrent);
+            if let Some(max_streams) = fp.max_concurrent_streams {
+                builder.max_concurrent_streams(max_streams);
             }
-            if let Some(max_header_list_size) = fp.max_header_list_size {
-                builder.max_header_list_size(max_header_list_size);
+            if let Some(max_header_list) = fp.max_header_list_size {
+                builder.max_header_list_size(max_header_list);
             }
             if let Some(header_table_size) = fp.header_table_size {
                 builder.header_table_size(header_table_size);
             }
 
-            // Apply fingerprint emulation options
-            if let Some(ref pseudo_order) = fp.pseudo_order {
-                builder.headers_pseudo_order(pseudo_order.clone());
+            // Apply pseudo-header order (critical for fingerprinting)
+            // Note: pseudo_order is set per-request, not on the connection builder
+            // if let Some(order) = &fp.pseudo_order { ... }
+
+            // Apply settings order (critical for fingerprinting)
+            if let Some(order) = &fp.settings_order {
+                builder.settings_order(order.clone());
             }
-            if let Some(ref settings_order) = fp.settings_order {
-                builder.settings_order(settings_order.clone());
-            }
-            if let Some(ref priorities) = fp.priorities {
-                builder.priorities(priorities.clone());
-            }
-            if let Some(ref stream_dep) = fp.stream_dependency {
-                builder.headers_stream_dependency(*stream_dep);
-            }
-            if let Some(ref experimental) = fp.experimental_settings {
-                builder.experimental_settings(experimental.clone());
-            }
+
+            // Apply priority frames (priorities sent after connection)
+            // Note: priorities are sent asynchronously after handshake
+            // if let Some(ref priorities) = fp.priorities { ... }
 
             // Apply push/connect protocol settings
             if let Some(enable_push) = fp.enable_push {

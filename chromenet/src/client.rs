@@ -21,12 +21,11 @@ use crate::base::neterror::NetError;
 use crate::cookies::monster::CookieMonster;
 use crate::emulation::{Emulation, EmulationFactory};
 use crate::http::streamfactory::HttpStreamFactory;
-use crate::http::transaction::HttpNetworkTransaction;
 use crate::socket::pool::ClientSocketPool;
 use crate::socket::proxy::ProxySettings;
 use crate::socket::tls::TlsOptions;
 use crate::urlrequest::job::URLRequestHttpJob;
-use http::{Method, Request as HttpRequest};
+use http::Method;
 use std::sync::Arc;
 use std::time::Duration;
 use url::Url;
@@ -163,7 +162,7 @@ impl ClientBuilder {
 
         let pool = Arc::new(ClientSocketPool::new(tls_opts));
         let factory = Arc::new(HttpStreamFactory::new(pool.clone()));
-        let cookie_store = Arc::new(self.cookie_store.unwrap_or_else(CookieMonster::new));
+        let cookie_store = Arc::new(self.cookie_store.unwrap_or_default());
 
         Client {
             pool,

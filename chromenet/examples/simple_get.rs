@@ -12,7 +12,7 @@ use url::Url;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize components
-    let pool = Arc::new(ClientSocketPool::new());
+    let pool = Arc::new(ClientSocketPool::new(None));
     let factory = Arc::new(HttpStreamFactory::new(pool));
     let cookies = Arc::new(CookieMonster::new());
 
