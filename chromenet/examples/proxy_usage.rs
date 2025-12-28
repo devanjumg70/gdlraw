@@ -2,7 +2,7 @@
 //!
 //! This example demonstrates how to configure different proxy types.
 
-use chromenet::socket::proxy::{ProxySettings, ProxyType};
+use chromenet::socket::proxy::ProxySettings;
 
 fn main() {
     // HTTP Proxy

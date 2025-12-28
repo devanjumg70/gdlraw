@@ -782,9 +782,9 @@ mod tests {
     fn test_list_profiles_returns_vec() {
         // Just verify the method doesn't panic
         let reader = BrowserCookieReader::new(Browser::Chrome);
-        let profiles = reader.list_profiles();
+        let _profiles = reader.list_profiles();
         // May or may not have profiles, just verify it's a Vec
-        assert!(profiles.len() >= 0);
+        // assert!(profiles.len() >= 0); // Always true for usize
     }
 
     #[test]

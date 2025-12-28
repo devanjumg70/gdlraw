@@ -416,7 +416,7 @@ mod tests {
     use super::*;
     use http::Response;
 
-    fn make_response(cache_control: &str, body: &str) -> Response<()> {
+    fn make_response(cache_control: &str, _body: &str) -> Response<()> {
         Response::builder()
             .status(200)
             .header(http::header::CACHE_CONTROL, cache_control)

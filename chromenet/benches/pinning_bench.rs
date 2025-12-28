@@ -9,7 +9,7 @@ fn pinning_check(c: &mut Criterion) {
     // Add some pinned domains
     for i in 0..10 {
         let hash = [i as u8; 32];
-        let mut pin_set = PinSet::new(&format!("example{}.com", i));
+        let mut pin_set = PinSet::new(format!("example{}.com", i));
         pin_set.add_pin(hash);
         store.add(pin_set);
     }

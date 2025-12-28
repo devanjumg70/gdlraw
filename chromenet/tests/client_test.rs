@@ -1,36 +1,29 @@
 //! Tests for Client API.
 
-use chromenet::client::{Client, ClientBuilder};
+use chromenet::client::Client;
 use chromenet::emulation::profiles::chrome::Chrome;
-use chromenet::emulation::{Emulation, EmulationFactory};
+use std::time::Duration; // Keep this as it's used later
 
 // === Client Tests ===
 
 #[test]
-fn test_client_new() {
-    let client = Client::new();
-    // Should create without panic
-    assert!(true);
+fn test_client_creation() {
+    let _client = Client::new();
 }
 
 #[test]
-fn test_client_builder_basic() {
-    let client = Client::builder().build();
-    assert!(true);
+fn test_client_builder() {
+    let _client = Client::builder().build();
 }
 
 #[test]
-fn test_client_builder_with_emulation() {
-    let client = Client::builder().emulation(Chrome::V140).build();
-    assert!(true);
+fn test_client_with_emulation() {
+    let _client = Client::builder().emulation(Chrome::V140).build();
 }
 
 #[test]
-fn test_client_builder_with_timeout() {
-    use std::time::Duration;
-
-    let client = Client::builder().timeout(Duration::from_secs(30)).build();
-    assert!(true);
+fn test_client_with_timeout() {
+    let _client = Client::builder().timeout(Duration::from_secs(30)).build();
 }
 
 #[test]

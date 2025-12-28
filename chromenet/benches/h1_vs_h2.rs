@@ -1,8 +1,5 @@
-use chromenet::http::streamfactory::{HttpStream, HttpStreamFactory};
-use chromenet::socket::pool::ClientSocketPool;
 use chromenet::urlrequest::request::URLRequest;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use std::sync::Arc;
 use tokio::runtime::Runtime;
 use url::Url;
 
@@ -19,8 +16,8 @@ use url::Url;
 // it requires a local test server capable of ALPN.
 
 fn benchmark_transaction_setup(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let url = Url::parse("https://www.google.com").unwrap(); // We'll just init, not start
+    let _rt = Runtime::new().unwrap();
+    let _url = Url::parse("https://www.google.com").unwrap(); // We'll just init, not start
 
     c.bench_function("transaction_new", |b| {
         b.iter(|| {
