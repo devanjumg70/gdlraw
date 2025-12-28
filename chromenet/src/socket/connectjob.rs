@@ -1,25 +1,19 @@
 use crate::base::neterror::NetError;
 use crate::dns::{HickoryResolver, Name, Resolve};
 use crate::socket::stream::{BoxedSocket, StreamSocket};
-use crate::socket::tls::{TlsConfig, TlsOptions};
-use boring::ssl::{SslConnector, SslMethod};
+use crate::socket::tls::{get_ssl_connector, TlsOptions};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_boring::SslStream;
 use url::Url;
 
 /// Chromium's Happy Eyeballs IPv6 fallback delay (250ms).
-const IPV6_FALLBACK_DELAY: Duration = Duration::from_millis(250);
+const IPV6_FALLBACK_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// Connection timeout (4 minutes, matches Chromium).
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(240);
-
-/// ALPN protocols: h2, http/1.1
-/// Wire format: length-prefixed strings
-const ALPN_PROTOS: &[u8] = b"\x02h2\x08http/1.1";
+const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(240);
 
 /// Result of a connection attempt, includes ALPN negotiation info.
 pub struct ConnectResult {
@@ -289,23 +283,8 @@ impl ConnectJob {
         host: &str,
         tls_options: Option<&TlsOptions>,
     ) -> Result<(SslStream<TcpStream>, bool), NetError> {
-        let mut builder =
-            SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
-
-        // ALPN for H2 and H1
-        builder
-            .set_alpn_protos(ALPN_PROTOS)
-            .map_err(|_| NetError::SslProtocolError)?;
-
-        // Apply Chrome TLS settings
-        if let Some(opts) = tls_options {
-            opts.apply_to_builder(&mut builder)?;
-        } else {
-            let tls_config = TlsConfig::default_chrome();
-            tls_config.apply_to_builder(&mut builder)?;
-        }
-
-        let connector = builder.build();
+        // Use cached connector for default config, or build custom
+        let connector = get_ssl_connector(tls_options)?;
         let config = connector
             .configure()
             .map_err(|_| NetError::SslProtocolError)?;
@@ -327,22 +306,8 @@ impl ConnectJob {
         host: &str,
         tls_options: Option<&TlsOptions>,
     ) -> Result<(SslStream<S>, bool), NetError> {
-        let mut builder =
-            SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
-
-        // ALPN for H2 and H1
-        builder
-            .set_alpn_protos(ALPN_PROTOS)
-            .map_err(|_| NetError::SslProtocolError)?;
-
-        if let Some(opts) = tls_options {
-            opts.apply_to_builder(&mut builder)?;
-        } else {
-            let tls_config = TlsConfig::default_chrome();
-            tls_config.apply_to_builder(&mut builder)?;
-        }
-
-        let connector = builder.build();
+        // Use cached connector for default config, or build custom
+        let connector = get_ssl_connector(tls_options)?;
         let config = connector
             .configure()
             .map_err(|_| NetError::SslProtocolError)?;

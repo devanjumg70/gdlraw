@@ -1,10 +1,35 @@
 //! Chrome browser profiles.
 //!
 //! Provides emulation configurations for various Chrome versions.
+//! Uses `std::sync::LazyLock` to cache profiles for efficient reuse.
 
 use crate::emulation::{Emulation, EmulationFactory, Http2Options};
 use crate::socket::tls::{AlpnProtocol, TlsOptions, TlsVersion};
 use http::{header, HeaderMap, HeaderValue};
+use std::sync::LazyLock;
+
+// Cached Chrome profiles - avoid rebuilding on every call
+static CHROME_V100: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("100.0.0.0"));
+static CHROME_V104: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("104.0.0.0"));
+static CHROME_V107: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("107.0.0.0"));
+static CHROME_V110: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("110.0.0.0"));
+static CHROME_V114: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("114.0.0.0"));
+static CHROME_V117: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("117.0.0.0"));
+static CHROME_V120: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("120.0.0.0"));
+static CHROME_V123: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("123.0.0.0"));
+static CHROME_V124: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("124.0.0.0"));
+static CHROME_V126: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("126.0.0.0"));
+static CHROME_V127: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("127.0.0.0"));
+static CHROME_V128: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("128.0.0.0"));
+static CHROME_V129: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("129.0.0.0"));
+static CHROME_V131: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("131.0.0.0"));
+static CHROME_V133: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("133.0.0.0"));
+static CHROME_V135: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("135.0.0.0"));
+static CHROME_V137: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("137.0.0.0"));
+static CHROME_V139: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("139.0.0.0"));
+static CHROME_V140: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("140.0.0.0"));
+static CHROME_V141: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("141.0.0.0"));
+static CHROME_V143: LazyLock<Emulation> = LazyLock::new(|| chrome_emulation("143.0.0.0"));
 
 /// Chrome browser versions for emulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -58,7 +83,30 @@ pub enum Chrome {
 
 impl EmulationFactory for Chrome {
     fn emulation(self) -> Emulation {
-        chrome_emulation(self.version_string())
+        // Return cached profile (clone is cheap compared to rebuilding)
+        match self {
+            Chrome::V100 => CHROME_V100.clone(),
+            Chrome::V104 => CHROME_V104.clone(),
+            Chrome::V107 => CHROME_V107.clone(),
+            Chrome::V110 => CHROME_V110.clone(),
+            Chrome::V114 => CHROME_V114.clone(),
+            Chrome::V117 => CHROME_V117.clone(),
+            Chrome::V120 => CHROME_V120.clone(),
+            Chrome::V123 => CHROME_V123.clone(),
+            Chrome::V124 => CHROME_V124.clone(),
+            Chrome::V126 => CHROME_V126.clone(),
+            Chrome::V127 => CHROME_V127.clone(),
+            Chrome::V128 => CHROME_V128.clone(),
+            Chrome::V129 => CHROME_V129.clone(),
+            Chrome::V131 => CHROME_V131.clone(),
+            Chrome::V133 => CHROME_V133.clone(),
+            Chrome::V135 => CHROME_V135.clone(),
+            Chrome::V137 => CHROME_V137.clone(),
+            Chrome::V139 => CHROME_V139.clone(),
+            Chrome::V140 => CHROME_V140.clone(),
+            Chrome::V141 => CHROME_V141.clone(),
+            Chrome::V143 => CHROME_V143.clone(),
+        }
     }
 }
 

@@ -3,7 +3,51 @@
 //! Combines Chromium-style TLS configuration with wreq emulation capabilities.
 
 use crate::base::neterror::NetError;
-use boring::ssl::{SslConnectorBuilder, SslVerifyMode, SslVersion};
+use boring::ssl::{SslConnector, SslConnectorBuilder, SslMethod, SslVerifyMode, SslVersion};
+use std::sync::LazyLock;
+
+/// ALPN protocols: h2, http/1.1 (wire format: length-prefixed strings)
+const ALPN_PROTOS: &[u8] = b"\x02h2\x08http/1.1";
+
+/// Cached SSL connector for default Chrome config.
+/// This avoids the 3.7ms overhead of `SslConnector::builder()` per connection.
+static DEFAULT_SSL_CONNECTOR: LazyLock<SslConnector> = LazyLock::new(|| {
+    let mut builder =
+        SslConnector::builder(SslMethod::tls()).expect("Failed to create SSL builder");
+
+    // Apply default Chrome TLS config
+    let config = TlsConfig::default_chrome();
+    config
+        .apply_to_builder(&mut builder)
+        .expect("Failed to apply default TLS config");
+
+    // Set ALPN protocols
+    builder
+        .set_alpn_protos(ALPN_PROTOS)
+        .expect("Failed to set ALPN protocols");
+
+    builder.build()
+});
+
+/// Get an SSL connector, using cached default or building custom.
+///
+/// For default Chrome TLS: returns cached connector (fast, ~1µs)
+/// For custom TLS options: builds new connector (slow, ~3.7ms)
+pub fn get_ssl_connector(tls_options: Option<&TlsOptions>) -> Result<SslConnector, NetError> {
+    match tls_options {
+        None => Ok(DEFAULT_SSL_CONNECTOR.clone()),
+        Some(opts) => {
+            // Custom options require building a new connector
+            let mut builder =
+                SslConnector::builder(SslMethod::tls()).map_err(|_| NetError::SslProtocolError)?;
+            opts.apply_to_builder(&mut builder)?;
+            builder
+                .set_alpn_protos(ALPN_PROTOS)
+                .map_err(|_| NetError::SslProtocolError)?;
+            Ok(builder.build())
+        }
+    }
+}
 
 pub mod impersonate;
 pub mod options;
