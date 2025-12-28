@@ -313,7 +313,7 @@ impl ConnectJob {
         let tls_stream = tokio_boring::connect(config, host, stream)
             .await
             .map_err(|e| {
-                eprintln!("SSL Handshake failed: {:?}", e);
+                tracing::debug!(target: "chromenet::socket", error = ?e, host = %host, "SSL handshake failed");
                 NetError::SslProtocolError
             })?;
 
@@ -350,7 +350,7 @@ impl ConnectJob {
         let tls_stream = tokio_boring::connect(config, host, stream)
             .await
             .map_err(|_| {
-                eprintln!("SSL Handshake (TLS-in-TLS) failed for host: {}", host);
+                tracing::debug!(target: "chromenet::socket", host = %host, "TLS-in-TLS handshake failed");
                 NetError::SslProtocolError
             })?;
 
@@ -425,7 +425,7 @@ impl ConnectJob {
 
         let response_str = String::from_utf8_lossy(&response);
         if !response_str.starts_with("HTTP/1.1 200") && !response_str.starts_with("HTTP/1.0 200") {
-            eprintln!("Proxy Tunnel Failed: {}", response_str);
+            tracing::warn!(target: "chromenet::socket", response = %response_str, "Proxy CONNECT tunnel failed");
             return Err(NetError::TunnelConnectionFailed);
         }
 

@@ -227,9 +227,7 @@ impl HttpNetworkTransaction {
                             Err(e) => {
                                 // Retry on reused socket failure
                                 if stream.is_reused() {
-                                    eprintln!(
-                                        "Socket reuse failed. Retrying with fresh connection."
-                                    );
+                                    tracing::debug!(target: "chromenet::http", error = ?e, url = %self.url, "Socket reuse failed, retrying with fresh connection");
                                     self.factory.report_failure(&self.url);
                                     self.stream = None;
                                     self.state = State::CreateStream;

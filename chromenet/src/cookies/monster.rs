@@ -260,7 +260,7 @@ impl CookieMonster {
 
             self.set_canonical_cookie(c);
         } else {
-            eprintln!("Failed to parse cookie: {}", cookie_line);
+            tracing::trace!(target: "chromenet::cookies", cookie = %cookie_line, "Failed to parse cookie");
         }
     }
 
