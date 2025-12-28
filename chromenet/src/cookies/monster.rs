@@ -14,6 +14,7 @@ const MAX_COOKIES_TOTAL: usize = 3000;
 
 /// The main entry point for cookie management.
 /// Modeled after Chromium's `net::CookieMonster`.
+#[derive(Clone)]
 pub struct CookieMonster {
     // Store: Map<Domain, List<Cookie>>
     // Using DashMap for high concurrency.

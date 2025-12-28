@@ -2,6 +2,12 @@
 name = "chromenet"
 version = "0.1.0"
 edition = "2021"
+authors = ["Deepmind Agentic Coding Team"]
+description = "A production-ready Rust HTTP client library with Chromium-inspired architecture for browser fingerprinting, TLS emulation, and advanced networking features."
+repository = "https://github.com/google-deepmind/chromenet"
+license = "MIT"
+keywords = ["http", "client", "browser", "fingerprinting", "chromium"]
+categories = ["network-programming", "web-programming::http-client"]
 
 [features]
 default = ["json"]

@@ -1,5 +1,9 @@
 # chromenet
 
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/google-deepmind/chromenet/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust Version](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org)
+
 A production-ready Rust HTTP client library with Chromium-inspired architecture for browser fingerprinting, TLS emulation, and advanced networking features.
 
 ## Features
