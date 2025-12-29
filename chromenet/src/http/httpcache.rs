@@ -49,6 +49,8 @@ pub struct CacheEntry {
     pub body: Bytes,
     /// When this entry was cached
     pub cached_at: Instant,
+    /// When this entry was inserted into the cache map (for pseudo-LRU)
+    pub inserted_at: Instant,
     /// Time-to-live (from max-age or Expires)
     pub ttl: Option<Duration>,
     /// ETag for conditional requests
@@ -227,6 +229,7 @@ impl HttpCache {
             headers: response.headers().clone(),
             body: body.clone(),
             cached_at: Instant::now(),
+            inserted_at: Instant::now(),
             ttl,
             etag,
             last_modified,
@@ -264,6 +267,8 @@ impl HttpCache {
                 entry.ttl = Some(Duration::from_secs(max_age));
             }
             entry.cached_at = Instant::now();
+            // Note: We do NOT update inserted_at here, to preserve insertion order for pseudo-LRU.
+            // If we updated it, it would act more like true LRU but with write contention.
 
             // Update ETag if present
             if let Some(etag) = response
@@ -350,14 +355,24 @@ impl HttpCache {
         }
     }
 
-    /// Evict one entry (oldest or least recently used).
+    /// Evict one entry (oldest inserted among 5 random samples).
     fn evict_one(&self) {
-        // Simple eviction: remove first entry found
-        // A proper LRU would track access times
-        if let Some(entry) = self.entries.iter().next() {
-            let key = entry.key().clone();
-            drop(entry);
+        // Pseudo-LRU: Sample 5 random entries and evict the one inserted earliest.
+        // This avoids strict LRU tracking overhead (mutex contention on reads).
+
+        let samples: Vec<_> = self.entries.iter().take(5).collect();
+
+        if let Some(oldest) = samples.iter().min_by_key(|e| e.value().inserted_at) {
+            let key = oldest.key().clone();
+            drop(samples); // Release locks
             self.remove_by_key(&key);
+        } else {
+            // Fallback for empty or single-entry cache (though iter() shouldn't be empty if len > 0)
+            if let Some(entry) = self.entries.iter().next() {
+                let key = entry.key().clone();
+                drop(entry);
+                self.remove_by_key(&key);
+            }
         }
     }
 

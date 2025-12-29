@@ -5,22 +5,34 @@
 //!
 //! Uses Mozilla's Public Suffix List via the `psl` crate.
 
+use dashmap::DashMap;
 use psl::{List, Psl};
+use std::sync::LazyLock;
+
+static PSL_CACHE: LazyLock<DashMap<String, bool>> = LazyLock::new(DashMap::new);
 
 /// Check if a domain is a public suffix (e.g., "com", "co.uk").
 /// Returns true if the domain itself is a public suffix.
 pub fn is_public_suffix(domain: &str) -> bool {
+    // Fast path: Check cache for the exact input string
+    if let Some(entry) = PSL_CACHE.get(domain) {
+        return *entry;
+    }
+
+    // Slow path: Calculate and cache
     let domain_lower = domain.to_lowercase();
     let domain_bytes = domain_lower.as_bytes();
 
-    // Get the suffix for this domain
-    if let Some(suffix) = List.suffix(domain_bytes) {
-        // The domain is a public suffix if it equals its own suffix
+    let result = if let Some(suffix) = List.suffix(domain_bytes) {
         suffix.as_bytes() == domain_bytes
     } else {
-        // Unknown TLD - treat as potentially unsafe
         false
-    }
+    };
+
+    // Cache the result for next time.
+    // We cache the input string (avoiding normalization on hits) at the cost of duplicate entries for mixed-case variants.
+    PSL_CACHE.insert(domain.to_string(), result);
+    result
 }
 
 /// Get the registrable domain (eTLD+1) for a domain.
