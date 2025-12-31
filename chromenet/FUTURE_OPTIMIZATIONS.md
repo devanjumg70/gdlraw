@@ -1,4 +1,4 @@
-# Future Enhancements
+do # Future Enhancements
 
 These items were identified during the Performance Optimization phase but were determined to be lower priority or outside current scope.
 
