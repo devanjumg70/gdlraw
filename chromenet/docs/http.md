@@ -72,3 +72,32 @@ let body = form.into_body();
 | `requestbody.rs` | Request body handling |
 | `streamfactory.rs` | H1/H2 stream creation |
 | `orderedheaders.rs` | Header ordering for fingerprinting |
+| `h2fingerprint.rs` | HTTP/2 fingerprinting |
+| `digestauth.rs` | HTTP Digest authentication (RFC 7616) |
+| `retry.rs` | Request retry logic |
+
+---
+
+## HTTP Digest Authentication
+
+Full RFC 7616 implementation for Digest access authentication.
+
+```rust
+use chromenet::http::digestauth::DigestAuthHandler;
+
+// Parse challenge from WWW-Authenticate header
+let handler = DigestAuthHandler::parse_challenge(
+    r#"realm="test", nonce="abc123", qop="auth", algorithm=SHA-256"#
+)?;
+
+// Generate Authorization header
+let auth_token = handler.generate_auth_token(
+    "GET",
+    "/protected",
+    "username",
+    "password"
+);
+```
+
+**Supported Algorithms**: MD5, MD5-sess, SHA-256, SHA-256-sess
+**QoP Modes**: auth, auth-int

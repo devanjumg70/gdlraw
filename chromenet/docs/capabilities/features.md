@@ -69,15 +69,16 @@ Match browser-specific H2 behavior.
 **API**: `http::h2fingerprint::H2Fingerprint`
 
 ### Browser Profiles
-Pre-configured emulation settings for 67 browser variants.
+Pre-configured emulation settings for 63 browser variants.
 
 | Browser | Versions | Count |
 |---------|----------|-------|
 | Chrome | V100-V143 | 21 |
 | Firefox | V109-V145 | 13 |
-| Safari | V15.0-V18.4 | 15 |
+| Safari | V15.3-V18.5 | 15 |
 | Edge | V101-V142 | 10 |
 | OkHttp | 3.x-5.x | 8 |
+| Opera | V116-V119 | 4 |
 
 **API**: 
 - `emulation::profiles::chrome::Chrome`

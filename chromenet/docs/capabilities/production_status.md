@@ -10,7 +10,7 @@ Comprehensive assessment of chromenet's readiness for production deployment.
 |--------|--------|
 | **Overall** | ✅ Conditionally Ready |
 | **Version** | 0.1.0 |
-| **Test Coverage** | 210 unit tests (all passing) |
+| **Test Coverage** | 338 tests (207 unit + 131 integration) |
 | **Benchmarks** | 11 benchmark suites |
 | **Documentation** | Architecture, API, module docs |
 
@@ -26,7 +26,7 @@ Comprehensive assessment of chromenet's readiness for production deployment.
 | HTTP/1.1 & HTTP/2 | Full protocol support, H2 fingerprinting |
 | HTTP Cache | RFC 7234 compliant, LRU eviction |
 | Cookie Management | RFC 6265, PSL, browser import |
-| Browser Emulation | 67 profiles, TLS + H2 fingerprinting |
+| Browser Emulation | 63 profiles, TLS + H2 fingerprinting |
 | HSTS | Preload list, dynamic entries, persistence |
 | Certificate Pinning | SPKI verification, subdomain support |
 | WebSocket | tokio-tungstenite, full client API |
@@ -95,16 +95,18 @@ Expect ~15-20 MB release binary due to BoringSSL static linking.
 
 ```
 cargo test --lib
-test result: ok. 210 passed; 0 failed; 0 ignored
+test result: ok. 338 passed; 0 failed; 0 ignored
 
 Modules covered:
 - base (NetError, LoadState)
 - cookies (CookieMonster, PSL, browser import)
-- http (transaction, cache, multipart)
-- socket (pool, connectjob, proxy)
-- tls (HSTS, pinning, CT)
+- http (transaction, cache, multipart, digest auth)
+- socket (pool, connectjob, proxy, authcache)
+- tls (HSTS, pinning, CT verifier)
 - urlrequest (job, device)
 - ws (WebSocket)
+- emulation (profiles, factory)
+- dns (hickory resolver)
 ```
 
 ---

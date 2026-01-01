@@ -2,7 +2,7 @@
 
 Complete flow diagrams and scenarios for the chromenet library.
 
-**Stats:** ~6,000 LOC | 112 tests | 9 benchmarks | 4 examples
+**Stats:** ~15,859 LOC | 338 tests (207 unit + 131 integration) | 11 benchmarks | 13 examples
 
 ## High-Level Architecture
 
@@ -190,12 +190,15 @@ sequenceDiagram
 
 | Module | Files | Responsibility |
 |--------|-------|----------------|
-| `urlrequest` | request.rs, job.rs, context.rs, device.rs | Public API |
-| `http` | transaction.rs, streamfactory.rs, retry.rs, h2settings.rs, orderedheaders.rs | HTTP/1.1 & H2 |
-| `socket` | pool.rs, connectjob.rs, stream.rs, tls.rs, proxy.rs, authcache.rs | Connections |
-| `cookies` | monster.rs, canonical_cookie.rs, persistence.rs, psl.rs, browser.rs, oscrypt.rs | Cookie state |
-| `tls` | hsts.rs, pinning.rs, ct.rs | Security |
-| `base` | neterror.rs, loadstate.rs | Common types |
+| `urlrequest` | request.rs, job.rs, context.rs, device.rs, profile.rs | Public API |
+| `http` | transaction.rs, streamfactory.rs, retry.rs, h2fingerprint.rs, orderedheaders.rs, digestauth.rs, httpcache.rs, multipart.rs | HTTP/1.1 & H2, Digest Auth |
+| `socket` | pool.rs, connectjob.rs, stream.rs, tls/, proxy.rs, authcache.rs, client.rs, matcher.rs | Connections |
+| `cookies` | monster.rs, canonicalcookie.rs, persistence.rs, psl.rs, browser.rs, oscrypt.rs, decrypt/ | Cookie state |
+| `tls` | hsts.rs, pinning.rs, ct.rs, ctverifier.rs | Security |
+| `base` | neterror.rs, loadstate.rs, context.rs | Common types |
+| `ws` | connection.rs, message.rs | WebSocket |
+| `emulation` | mod.rs, factory.rs, profiles/ | Browser emulation |
+| `dns` | resolve.rs, hickory.rs, gai.rs | DNS resolution |
 
 ---
 
@@ -203,9 +206,12 @@ sequenceDiagram
 
 | Module | Unit Tests | Integration Tests |
 |--------|------------|-------------------|
-| cookies | 17 | 6 (psl_test) |
-| http | 20 | - |
-| socket | 7 | 6 (authcache_test) |
-| tls | 21 | 12 (hsts_test, pinning_test) |
-| urlrequest | 9 | - |
-| **Total** | **88** | **24** |
+| cookies | 25+ | psl_test, cookies_test |
+| http | 30+ | http_body_test, headers_test |
+| socket | 15+ | pool_test, socket_pool_test, authcache_test |
+| tls | 25+ | hsts_test, pinning_test, tls_test |
+| urlrequest | 10+ | urlrequest_test, redirect_test |
+| emulation | 20+ | emulation_test |
+| ws | 10+ | - |
+| dns | 5+ | dns_test |
+| **Total** | **207** | **131** |

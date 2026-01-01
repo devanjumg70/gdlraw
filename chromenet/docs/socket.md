@@ -1,15 +1,15 @@
 # Socket Module
 
-## Files
 | File | Lines | Purpose |
 |------|-------|---------|
-| [pool.rs](../src/socket/pool.rs) | ~420 | Connection pooling |
-| [connectjob.rs](../src/socket/connectjob.rs) | ~315 | Connection establishment |
-| [tls.rs](../src/socket/tls.rs) | ~100 | TLS configuration |
-| [proxy.rs](../src/socket/proxy.rs) | ~50 | Proxy settings |
-| [client.rs](../src/socket/client.rs) | ~100 | Client socket wrapper |
-| [stream.rs](../src/socket/stream.rs) | ~80 | Stream abstractions |
-| [authcache.rs](../src/socket/authcache.rs) | ~190 | Auth credential cache (NEW) |
+| [pool.rs](../src/socket/pool.rs) | ~463 | Connection pooling |
+| [connectjob.rs](../src/socket/connectjob.rs) | ~476 | Connection establishment |
+| [tls/](../src/socket/tls/) | ~150 | TLS configuration (directory with mod.rs, options.rs, impersonate.rs) |
+| [proxy.rs](../src/socket/proxy.rs) | ~200 | Proxy settings |
+| [client.rs](../src/socket/client.rs) | ~160 | Client socket wrapper |
+| [stream.rs](../src/socket/stream.rs) | ~110 | Stream abstractions |
+| [authcache.rs](../src/socket/authcache.rs) | ~312 | Auth credential cache |
+| [matcher.rs](../src/socket/matcher.rs) | ~175 | URL/pattern matching |
 
 ---
 
@@ -104,8 +104,10 @@ if let Some(entry) = cache.lookup("proxy.com", 8080, "MyRealm") {
 | Scheme | Status |
 |--------|--------|
 | Basic | ✅ Implemented |
-| Digest | ⚙️ Stub |
-| NTLM | ⚙️ Stub |
+| Digest | ✅ Implemented (RFC 7616 - see `http/digestauth.rs`, 484 lines) |
+
+> [!NOTE]
+> Digest authentication is fully implemented with MD5, MD5-sess, SHA-256, SHA-256-sess algorithms and QoP (auth/auth-int) support.
 
 ---
 

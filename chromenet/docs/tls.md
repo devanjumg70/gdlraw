@@ -5,9 +5,10 @@ Security features for TLS connections, including HSTS, certificate pinning, and 
 ## Files
 | File | Lines | Purpose |
 |------|-------|---------|
-| [hsts.rs](../src/tls/hsts.rs) | ~220 | HTTP Strict Transport Security |
-| [pinning.rs](../src/tls/pinning.rs) | ~260 | Certificate pinning |
-| [ct.rs](../src/tls/ct.rs) | ~125 | Certificate Transparency |
+| [hsts.rs](../src/tls/hsts.rs) | ~331 | HTTP Strict Transport Security |
+| [pinning.rs](../src/tls/pinning.rs) | ~280 | Certificate pinning |
+| [ct.rs](../src/tls/ct.rs) | ~77 | CT types and SCT structures |
+| [ctverifier.rs](../src/tls/ctverifier.rs) | ~403 | Multi-log CT verification |
 
 ---
 
@@ -85,29 +86,44 @@ store.check("api.example.com", &cert_hashes)?;
 
 ---
 
-## Certificate Transparency (Stub)
+## Certificate Transparency
 
-Verify Signed Certificate Timestamps (SCTs).
+Verify Signed Certificate Timestamps (SCTs) against known CT logs.
 
-> **Note**: This is a stub implementation. Full CT requires log public keys and signature verification.
+> [!NOTE]
+> Full infrastructure implemented in `MultiLogCtVerifier` (403 lines). Signature verification uses a simplified implementation - all non-empty signatures from known logs are accepted.
+
+### Features
+| Feature | Status |
+|---------|--------|
+| SCT list parsing | ✅ RFC 6962 compliant |
+| Log registry | ✅ Add/lookup logs by ID |
+| Timestamp validation | ✅ Reject future timestamps |
+| Requirement levels | ✅ NotRequired, SoftFail, Required |
+| ECDSA verification | ⚠️ Simplified (placeholder) |
 
 ### Usage
 ```rust
-use chromenet::tls::ct::{CtVerifier, CtRequirement};
+use chromenet::tls::ctverifier::{MultiLogCtVerifier, CtLog};
+use chromenet::tls::ct::CtRequirement;
 
-let verifier = CtVerifier::new()
+let verifier = MultiLogCtVerifier::new()
     .with_requirement(CtRequirement::SoftFail);
 
-// Soft-fail: log warning but allow connection
-verifier.verify(&cert_chain, &scts)?;
+// Add known CT logs
+verifier.add_log(CtLog::new(log_id, public_key, "Google Argon"));
+
+// Verify SCTs from certificate
+let results = verifier.verify(&scts, &cert_der, current_time);
+verifier.check_requirements(&results)?;
 ```
 
 ### Requirement Levels
 | Level | Behavior |
 |-------|----------|
 | `NotRequired` | CT not checked |
-| `SoftFail` | Log warning if missing |
-| `Required` | Block if no valid SCTs |
+| `SoftFail` | Log warning if missing/invalid |
+| `Required` | Block connection without valid SCTs |
 
 ---
 
@@ -117,4 +133,4 @@ verifier.verify(&cert_chain, &scts)?;
 |--------------|------|---------|
 | `TransportSecurityState` | `HstsStore` | HSTS enforcement |
 | `TransportSecurityState::PKPState` | `PinStore` | Certificate pinning |
-| `CTVerifier` | `CtVerifier` | SCT verification |
+| `MultiLogCTVerifier` | `MultiLogCtVerifier` | SCT verification |

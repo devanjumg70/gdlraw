@@ -130,11 +130,12 @@ if is_encrypted(encrypted_value) {
 ```
 
 ### Encryption Versions
-| Version | Key Source | Status |
-|---------|------------|--------|
-| v10 (Linux) | Hardcoded PBKDF2 | ✅ Implemented |
-| v10 (Windows) | DPAPI | ⏳ Not implemented |
-| v11 | Keyring/Keychain | ⏳ Not implemented |
+| Platform | Version | Key Source | Status |
+|----------|---------|------------|--------|
+| Linux | v10 | Hardcoded "peanuts" + PBKDF2 | ✅ Implemented |
+| Linux | v11 | GNOME Keyring + PBKDF2 | ✅ Implemented |
+| macOS | v10 | Keychain + PBKDF2 (1003 iter) | ✅ Implemented |
+| Windows | v10+ | DPAPI + AES-256-GCM | ✅ Implemented |
 
 ---
 

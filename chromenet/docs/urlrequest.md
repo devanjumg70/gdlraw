@@ -1,10 +1,13 @@
 # URLRequest Module
 
 ## Files
-- [context.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/urlrequest/context.rs) (~120 lines) **NEW**
-- [request.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/urlrequest/request.rs) (52 lines)
-- [job.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/urlrequest/job.rs) (139 lines)
-- [device.rs](file:///home/ubuntu/projects/chromium/dl/chromenet/src/urlrequest/device.rs) (107 lines)
+| File | Lines | Purpose |
+|------|-------|---------|
+| [context.rs](../src/urlrequest/context.rs) | ~150 | URLRequestContext configuration |
+| [request.rs](../src/urlrequest/request.rs) | ~100 | URLRequest public API |
+| [job.rs](../src/urlrequest/job.rs) | ~240 | HTTP job and redirect handling |
+| [device.rs](../src/urlrequest/device.rs) | ~160 | Device emulation registry |
+| [profile.rs](../src/urlrequest/profile.rs) | ~330 | Connection profile management |
 
 ---
 
